@@ -23,7 +23,7 @@ Goal: the Mac mini, accounts and repo are ready, and the blocking questions are 
 **Mac mini host**
 
 - [x] Disable sleep, enable restart after power failure, confirm network time sync
-- [x] Connect a UPS (macOS does not see it; no USB data link, so no automatic shutdown on low battery)
+- [x] ~~Connect a UPS~~ Dropped (owner decision): no UPS. A power cut is an abrupt shutdown; autorestart brings the mini back, and startup reconciliation (OM-05) recovers state
 - [x] SSH key-only login; add a `Host mini` entry on the MacBook
 - [x] Install Homebrew, PostgreSQL, Python 3.12, uv, Supervisor
 - [x] Store Alpaca keys in a gitignored `.env` with mode 600 (replaces the Keychain of BRD 9.1)
@@ -36,7 +36,7 @@ Goal: the Mac mini, accounts and repo are ready, and the blocking questions are 
 - [x] Scaffold the modular monolith: adapters, features, strategies, accounts, orders, analytics
 - [x] Add pytest and a migrations tool
 
-**Gate:** host survives a reboot and power-cut test; the repo runs a hello-world against the Alpaca paper API with keys from `.env`.
+**Gate:** host survives a reboot and power-cut test; (reboot passed Oct 23, 2026) the repo runs a hello-world against the Alpaca paper API with keys from `.env`.
 
 ## Step 2 — Specify strategies and build replay (Phase 1)
 
