@@ -67,6 +67,13 @@ Goal: all five strategies are written down precisely and replay through the same
 
 Goal: everything between a candidate and a reconciled fill works in shadow mode before any paper order.
 
+**Live market data**
+
+- [ ] Live feed handler: one shared SIP + OPRA stream inside the engine process, fanned out to all five workers (FR-03)
+- [ ] Subscriptions limited to SPY and the option contracts in play, within stream limits (MD-08, MD-10)
+- [ ] Quote freshness and feature-readiness gates on entries (MD-04); stale feed halts entries (AC-08)
+- [ ] Startup rejects the indicative options feed in paper mode (MD-09, AC-23)
+
 **Accounts, risk and sizing**
 
 - [ ] Experiment manager: immutable manifest with git tag, $10,000 balances, risk limits (BRD 10.1)

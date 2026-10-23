@@ -66,6 +66,29 @@ uv run alembic upgrade head
 uv run alembic revision --autogenerate -m "describe change"
 ```
 
+## Historical market data
+
+There is one shared store under `data/history/` (gitignored), filled by one batch job. Strategies
+read from it and never fetch data themselves. It holds one Parquet file per dataset per session
+day; a file that exists is complete, and each file records its source, feed and code commit.
+
+| Dataset | Contents |
+|---|---|
+| `calendar.parquet` | Sessions since Feb 2024, open and close in UTC, early closes |
+| `spy_bars_1m` | SIP 1-minute bars, 04:00 to 4h after the close, with a `regular_session` flag |
+| `spy_trades` | SIP trades, regular session |
+| `option_contracts` | The day's universe: expiries up to 7 days out, strikes within ±5% of the 09:30 open |
+| `option_bars_1m` | OPRA 1-minute bars for that universe; `bars_source` says whether they came from Alpaca or were built from trades where Alpaca's bars are missing |
+
+```bash
+uv run tournament history download     # Feb 1 2024 to yesterday; skips days on disk
+uv run tournament history status
+```
+
+The download needs the `data` keys. It refuses to start, and pauses between days, from 09:00 to
+16:30 ET on weekdays. Rerun it to resume. Alpaca has no historical option quotes, so replay sees
+option prices but not past bid/ask spreads.
+
 ## Host operations (`ops/`)
 
 One-time host setup, run on the mini after the close. It sets power and time, makes SSH
