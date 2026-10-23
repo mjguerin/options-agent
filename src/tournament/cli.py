@@ -1,4 +1,4 @@
-"""Command line entry point: `tournament keys check`, `tournament hello`."""
+"""Command line entry point: `tournament keys check`, `hello`, `data-check`."""
 
 from __future__ import annotations
 
@@ -42,6 +42,20 @@ def _hello(args: argparse.Namespace) -> int:
     return 0
 
 
+def _data_check(args: argparse.Namespace) -> int:
+    from tournament.adapters.alpaca import check_data_entitlements, data_clients
+
+    try:
+        creds = load_alpaca_credentials(args.account)
+    except (MissingCredentialsError, InsecureEnvFileError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    checks = check_data_entitlements(*data_clients(creds))
+    for check in checks:
+        print(f"  {check.feed:5} {'OK  ' if check.ok else 'FAIL'} {check.detail}")
+    return 0 if all(c.ok for c in checks) else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tournament")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -55,6 +69,10 @@ def build_parser() -> argparse.ArgumentParser:
     hello = sub.add_parser("hello", help="read the paper account through the Alpaca API")
     hello.add_argument("--account", default="dev", help="account alias (default: dev)")
     hello.set_defaults(func=_hello)
+
+    data = sub.add_parser("data-check", help="confirm real-time SIP and OPRA market data access")
+    data.add_argument("--account", default="data", help="account alias (default: data)")
+    data.set_defaults(func=_data_check)
     return parser
 
 
