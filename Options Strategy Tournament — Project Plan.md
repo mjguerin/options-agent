@@ -50,7 +50,7 @@ Goal: all five strategies are written down precisely and replay through the same
 
 **Data and features**
 
-- [ ] Download SPY and SPY option history from February 2024 into daily Parquet files
+- [x] Download SPY and SPY option history from February 2024 into daily Parquet files (684 sessions to 2026-10-22, 4.5 GB; verified complete Oct 23, 2026)
 - [ ] Build the event normalizer with gap, duplicate and late-event checks (MD-02, MD-03)
 - [ ] Build the shared feature engine, computing each feature once per event
 
