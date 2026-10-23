@@ -23,7 +23,7 @@ Goal: the Mac mini, accounts and repo are ready, and the blocking questions are 
 **Mac mini host**
 
 - [x] Disable sleep, enable restart after power failure, confirm network time sync
-- [ ] Connect a UPS
+- [x] Connect a UPS (macOS does not see it; no USB data link, so no automatic shutdown on low battery)
 - [x] SSH key-only login; add a `Host mini` entry on the MacBook
 - [x] Install Homebrew, PostgreSQL, Python 3.12, uv, Supervisor
 - [x] Store Alpaca keys in a gitignored `.env` with mode 600 (replaces the Keychain of BRD 9.1)
@@ -31,8 +31,8 @@ Goal: the Mac mini, accounts and repo are ready, and the blocking questions are 
 
 **Code and tooling**
 
-- [ ] Create the private GitHub repo and clone it into the single working directory on the mini (local repo on the mini done; GitHub remote pending)
-- [ ] Connect the IDE from the MacBook with Remote-SSH
+- [x] Create the private GitHub repo and clone it into the single working directory on the mini
+- [x] ~~Connect the IDE from the MacBook with Remote-SSH~~ Not needed: development happens directly on the mini through Claude Code over SSH
 - [x] Scaffold the modular monolith: adapters, features, strategies, accounts, orders, analytics
 - [x] Add pytest and a migrations tool
 
