@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Alpaca keys live in .env (mode 600) and never in git
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Market data archive (daily Parquet) and local databases stay out of git
+data/
+*.parquet
+*.duckdb
+
+# Logs
+logs/
+*.log
+
+# macOS
+.DS_Store
+._*
