@@ -16,7 +16,7 @@ Goal: the Mac mini, accounts and repo are ready, and the blocking questions are 
 
 **Accounts and data**
 
-- [ ] Email Alpaca support: is a second login for extra paper accounts permitted? (D02)
+- [x] Email Alpaca support: is a second login for extra paper accounts permitted? (D02) Confirmed: second login permitted, 6 paper accounts available
 - [ ] Subscribe to Algo Trader Plus and confirm the price and OPRA access (D03)
 - [x] Create one $10,000 paper account for development; keep the rest for Phase 2
 
@@ -36,7 +36,7 @@ Goal: the Mac mini, accounts and repo are ready, and the blocking questions are 
 - [x] Scaffold the modular monolith: adapters, features, strategies, accounts, orders, analytics
 - [x] Add pytest and a migrations tool
 
-**Gate:** host survives a reboot and power-cut test; (reboot passed Oct 23, 2026) the repo runs a hello-world against the Alpaca paper API with keys from `.env`.
+**Gate (passed Oct 23, 2026):** host survives a reboot and power-cut test; the repo runs a hello-world against the Alpaca paper API with keys from `.env`. Reboot and power cut both recovered with no login: Postgres crash recovery clean, paper API reachable.
 
 ## Step 2 — Specify strategies and build replay (Phase 1)
 
