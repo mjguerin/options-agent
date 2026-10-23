@@ -18,23 +18,23 @@ Goal: the Mac mini, accounts and repo are ready, and the blocking questions are 
 
 - [ ] Email Alpaca support: is a second login for extra paper accounts permitted? (D02)
 - [ ] Subscribe to Algo Trader Plus and confirm the price and OPRA access (D03)
-- [ ] Create one $10,000 paper account for development; keep the rest for Phase 2
+- [x] Create one $10,000 paper account for development; keep the rest for Phase 2
 
 **Mac mini host**
 
-- [ ] Disable sleep, enable restart after power failure, confirm network time sync
+- [x] Disable sleep, enable restart after power failure, confirm network time sync
 - [ ] Connect a UPS
-- [ ] SSH key-only login; add a `Host mini` entry on the MacBook
-- [ ] Install Homebrew, PostgreSQL, Python 3.12, uv, Supervisor
-- [ ] Store Alpaca keys in a gitignored `.env` with mode 600 (replaces the Keychain of BRD 9.1)
-- [ ] Set up nightly local pg\_dump (no off-machine copy, owner decision), and test one restore
+- [x] SSH key-only login; add a `Host mini` entry on the MacBook
+- [x] Install Homebrew, PostgreSQL, Python 3.12, uv, Supervisor
+- [x] Store Alpaca keys in a gitignored `.env` with mode 600 (replaces the Keychain of BRD 9.1)
+- [x] Set up nightly local pg\_dump (no off-machine copy, owner decision), and test one restore
 
 **Code and tooling**
 
-- [ ] Create the private GitHub repo and clone it into the single working directory on the mini
+- [ ] Create the private GitHub repo and clone it into the single working directory on the mini (local repo on the mini done; GitHub remote pending)
 - [ ] Connect the IDE from the MacBook with Remote-SSH
-- [ ] Scaffold the modular monolith: adapters, features, strategies, accounts, orders, analytics
-- [ ] Add pytest and a migrations tool
+- [x] Scaffold the modular monolith: adapters, features, strategies, accounts, orders, analytics
+- [x] Add pytest and a migrations tool
 
 **Gate:** host survives a reboot and power-cut test; the repo runs a hello-world against the Alpaca paper API with keys from `.env`.
 
