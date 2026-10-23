@@ -17,7 +17,7 @@ Goal: the Mac mini, accounts and repo are ready, and the blocking questions are 
 **Accounts and data**
 
 - [x] Email Alpaca support: is a second login for extra paper accounts permitted? (D02) Confirmed: second login permitted, 6 paper accounts available
-- [x] Subscribe to Algo Trader Plus and confirm the price and OPRA access (D03) Subscribed on the second login; real-time SIP and OPRA confirmed Oct 23, 2026 with `tournament data-check` (data keys: alias `data`)
+- [x] Subscribe to Algo Trader Plus and confirm the price and OPRA access (D03) Subscribed on the second login at $99/month; real-time SIP and OPRA confirmed Oct 23, 2026 with `tournament data-check` (data keys: alias `data`)
 - [x] Create one $10,000 paper account for development; keep the rest for Phase 2
 
 **Mac mini host**
