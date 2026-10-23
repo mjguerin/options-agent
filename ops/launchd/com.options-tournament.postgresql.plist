@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- System LaunchDaemon: PostgreSQL starts at boot, without anyone logging in,
+     but still runs as the owner's user. __USER__ is filled in by setup_host.sh. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.options-tournament.postgresql</string>
+	<key>UserName</key>
+	<string>__USER__</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/opt/postgresql@18/bin/postgres</string>
+		<string>-D</string>
+		<string>/opt/homebrew/var/postgresql@18</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>LC_ALL</key>
+		<string>en_US.UTF-8</string>
+	</dict>
+	<key>WorkingDirectory</key>
+	<string>/opt/homebrew</string>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>/opt/homebrew/var/log/postgresql@18.log</string>
+	<key>StandardErrorPath</key>
+	<string>/opt/homebrew/var/log/postgresql@18.log</string>
+</dict>
+</plist>

@@ -27,7 +27,7 @@ Goal: the Mac mini, accounts and repo are ready, and the blocking questions are 
 - [ ] SSH key-only login; add a `Host mini` entry on the MacBook
 - [ ] Install Homebrew, PostgreSQL, Python 3.12, uv, Supervisor
 - [ ] Store Alpaca keys in a gitignored `.env` with mode 600 (replaces the Keychain of BRD 9.1)
-- [ ] Set up nightly pg\_dump with an off-machine copy, and test one restore
+- [ ] Set up nightly local pg\_dump (no off-machine copy, owner decision), and test one restore
 
 **Code and tooling**
 

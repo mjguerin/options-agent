@@ -66,6 +66,25 @@ uv run alembic upgrade head
 uv run alembic revision --autogenerate -m "describe change"
 ```
 
+## Host operations (`ops/`)
+
+One-time host setup, run on the mini after the close. It sets power and time, makes SSH
+key-only, starts PostgreSQL at boot without a login, and schedules the nightly backup:
+
+```bash
+sudo ops/host/setup_host.sh
+```
+
+The backup runs every night at 20:00: a local `pg_dump` into `~/backups/options-tournament`, kept
+for 14 days. There's no off-machine copy by default. Setting `BACKUP_OFFSITE` in
+`~/.config/options-tournament/backup.conf` adds one. The log is
+`~/Library/Logs/options-tournament/backup.log`. To run it by hand, or to test a restore:
+
+```bash
+ops/backup/pg_backup.sh
+ops/backup/restore_test.sh
+```
+
 ## Rules of the road
 
 - Code changes only after the close, with the engine stopped.

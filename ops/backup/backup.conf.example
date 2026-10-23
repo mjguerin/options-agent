@@ -1,0 +1,9 @@
+# Copy to ~/.config/options-tournament/backup.conf on the mini. Not a secret file.
+
+BACKUP_DB="options_tournament"
+BACKUP_LOCAL_DIR="$HOME/backups/options-tournament"
+BACKUP_KEEP_DAYS=14
+
+# Optional off-machine copy via rsync: a local path (mounted share, cloud-synced
+# folder) or user@host:/path over SSH. Unset = local dumps only.
+BACKUP_OFFSITE=""
