@@ -164,18 +164,72 @@ excluded codes, wasn't measured; it belongs in the full-history report.
   | Our design | Deliberately different: SD-03's volume-only slot keeps its volume with null prices |
   | Residual | 1 session (2025-09-18), 278 shares, the same size as the 2 mismatching minutes; not investigated further |
 
+## Implementation
+
+- [src/tournament/marketdata/eligibility.py](../src/tournament/marketdata/eligibility.py): config
+  loading, classification per date and use mode (`development`, `holdout` or `live`, which scopes
+  E-5), CTS combination rules and constraints, `LastState` updated from resolved eligibility.
+- [src/tournament/marketdata/bars.py](../src/tournament/marketdata/bars.py): stage 2. Every
+  scheduled slot gets a row with its `interval_status`; one price population for OHLC and VWAP;
+  cumulative `vwap_notional`, `vwap_volume` and `total_volume`; `vwap_uncertain` from the first
+  uncertain slot; `premarket_levels` with its own state.
+
+## Full-history report (checklist item 8)
+
+The production builder, `Usage.DEVELOPMENT`, against provider bars for **all 684 sessions,
+265,680 regular minutes** ([full_history_report.py](../research/eligibility/full_history_report.py);
+output in `data/reports/d04_full_history.json`). Tolerances: 1e-6 for prices, volume and count;
+5e-6 for minute VWAP.
+
+| Field | Agreement | Discrepancies by category |
+|---|---|---|
+| Open | 99.887% | 275 opening-minute T print · 23 finalization · 2 unexplained |
+| High | 99.990% | 23 opening-minute T print · 4 finalization · 1 unexplained |
+| Low | 99.992% | 15 opening-minute T print · 4 finalization · 3 unexplained |
+| Close | 99.9996% | 1 finalization |
+| Minute VWAP | 99.645% | 624 opening-minute T print · 318 finalization · 2 unexplained |
+| Volume, trade count | 99.129% | 2,314 finalization |
+
+**Categories and evidence status:**
+
+| Category | Rule | Status |
+|---|---|---|
+| `opening_minute_T_print` | Prices in slot 1: the provider value equals a T-conditioned print in that minute. VWAP in slot 1: our last-eligible trades **plus round-lot T prints reproduce the provider's VWAP** within 5e-6 | Observed and reproduced; the provider's rule is not documented |
+| `likely_provider_finalization_difference` | Any field, in a minute where our volume exceeds the provider's, i.e. a trade on the final tape absent from the provider bar | Hypothesized, not verified |
+| `unexplained` | 8 field values in 5 minutes | See below |
+
+**The 8 unexplained values:**
+- **3, a provider price-precision artifact.** 2026-07-10 (open, twice) and 2026-07-13 (low): sub-penny
+  trade prices such as 753.942907 against the provider's 753.9429. The provider appears to round to
+  4 decimals; every difference is below 1e-5.
+- **5, in two minutes of 2024-06-03.** 10:26 and 10:29 ET: high, low and VWAP differ. That morning
+  coincides with the publicly reported NYSE technical issue, with halts and later trade
+  cancellations; *to verify*. A final tape without busted trades would differ from a live bar. The
+  cause isn't established.
+
+**Coverage and data status across all sessions:**
+- Every slot is `PRESENT`, and coverage matches the provider exactly.
+- 0 quarantined trades; no session with `vwap_uncertain`.
+- The E-5 assumptions applied exactly where expected: `O` in 39 slots, `N` in 1,583.
+- **Pre-market levels:** 684 / 684 sessions produced PMH and PML. PMH equals the provider's
+  pre-market high in 684, PML equals its low in 682.
+
 ## Freeze checklist (owner's list)
 
 1. [x] Conditional state updates use resolved eligibility; ordering claims narrowed (this draft)
 2. [x] E-4(a) selected; SD-04 and the snapshot schema name the population and its accumulators
 3. [x] E-5 recast as scoped development-only assumptions; the gaps stay open
-4. [ ] Synthetic fixtures for every row, note, qualifying `NOTE_2`/`NOTE_3` case, multi-note case,
-       informational-state case and observed combination. These come with the bar-builder code
+4. [x] Synthetic fixtures ([tests/test_bars.py](../tests/test_bars.py), 84 cases, expected values
+       hand-written from CTS): every matrix row; every observed regular combination; qualifying
+       `NOTE_2`/`NOTE_3`; multi-note; informational state; constraint violations; unknown codes;
+       use-mode scoping of E-5; volume-only and gap slots; VWAP accumulators; ordering;
+       pre-market marker and separate state
 5. [x] "Zero unexplained" replaced with classified categories and an evidence status
 6. [x] Sample counts and `O` coverage reconciled
 7. [x] Pre-market trades downloaded, kept raw, and validated (E-6). See "Pre-market data" below.
        Building PMH and PML under the adapter is part of the bar-builder code
-8. [ ] Full-history report: all 684 sessions, stated tolerances, evidence-status categories
+8. [x] Full-history report: all 684 sessions, stated tolerances, evidence-status categories
+       (below)
 9. [ ] Provenance: OPEN-SRC-1 to 4 resolved where possible (CTS 2.9g; an edition before 2.10a;
        go-live dates; the CTS lifecycle for `M`, `Q` and `9`)
 

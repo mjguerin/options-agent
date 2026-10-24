@@ -6,6 +6,7 @@ version: adapter-v1-draft2
 matrix: cts_sale_conditions.csv
 notes: notes.yaml
 effective_interval_convention: "effective_from inclusive, effective_to exclusive"
+listing_market: {SPY: "P"}   # NYSE Arca participant ID, used by NOTE_3
 
 processing:   # two stages, per trade, in evaluation order (notes.yaml state.evaluation_order)
   stage_1_sip: >
