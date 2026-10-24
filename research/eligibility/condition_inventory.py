@@ -27,20 +27,42 @@ for d in sample:
     rows += t.num_rows
     for tape, n in zip(*pc.value_counts(t.column("tape")).flatten()):
         tapes[tape.as_py()] += n.as_py()
-    for conds, n in zip(*pc.value_counts(
-        pc.binary_join(pc.list_sort(t.column("conditions")) if hasattr(pc, "list_sort") else t.column("conditions"), "|")
-    ).flatten()):
+    for conds, n in zip(
+        *pc.value_counts(
+            pc.binary_join(
+                pc.list_sort(t.column("conditions"))
+                if hasattr(pc, "list_sort")
+                else t.column("conditions"),
+                "|",
+            )
+        ).flatten()
+    ):
         key = conds.as_py()
         by_set[key] += n.as_py()
         for c in key.split("|"):
             by_code[c] += n.as_py()
             first_seen.setdefault(c, str(d))
             last_seen[c] = str(d)
-print(json.dumps({
-    "sessions_sampled": len(sample), "first": str(sample[0]), "last": str(sample[-1]),
-    "trades": rows, "tapes": dict(tapes),
-    "codes": {c: {"trades": n, "share": round(n / rows, 6), "first": first_seen[c], "last": last_seen[c]}
-              for c, n in by_code.most_common()},
-    "combinations": {k: n for k, n in by_set.most_common(40)},
-    "distinct_combinations": len(by_set),
-}, indent=1))
+print(
+    json.dumps(
+        {
+            "sessions_sampled": len(sample),
+            "first": str(sample[0]),
+            "last": str(sample[-1]),
+            "trades": rows,
+            "tapes": dict(tapes),
+            "codes": {
+                c: {
+                    "trades": n,
+                    "share": round(n / rows, 6),
+                    "first": first_seen[c],
+                    "last": last_seen[c],
+                }
+                for c, n in by_code.most_common()
+            },
+            "combinations": {k: n for k, n in by_set.most_common(40)},
+            "distinct_combinations": len(by_set),
+        },
+        indent=1,
+    )
+)

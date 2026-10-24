@@ -77,6 +77,7 @@ day; a file that exists is complete, and each file records its source, feed and 
 | `calendar.parquet` | Sessions since Feb 2024, open and close in UTC, early closes |
 | `spy_bars_1m` | SIP 1-minute bars, 04:00 to 4h after the close, with a `regular_session` flag |
 | `spy_trades` | SIP trades, regular session |
+| `spy_trades_premarket` | SIP trades, 04:00 ET to the open, raw and unfiltered; input for PMH and PML under the E-6 adapter |
 | `option_contracts` | The day's universe: expiries up to 7 days out, strikes within ±5% of the 09:30 open |
 | `option_bars_1m` | OPRA 1-minute bars for that universe; `bars_source` says whether they came from Alpaca or were built from trades where Alpaca's bars are missing |
 

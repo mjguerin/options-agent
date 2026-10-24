@@ -65,6 +65,7 @@ class FakeSource:
 
     def stock_trades(self, symbol, start, end):
         self.calls.append("stock_trades")
+        self.trade_windows = getattr(self, "trade_windows", []) + [(start, end)]
         return trades_table(
             [
                 {
@@ -313,3 +314,17 @@ def test_run_stops_between_days_and_keeps_finished_ones(tmp_path):
         )
     assert store.has("spy_trades", DAY.session_date)
     assert not store.has("spy_trades", second.session_date)
+
+
+def test_premarket_trades_window_and_raw_conditions(setup):
+    source, store, dl = setup
+    dl.download_day(DAY, datasets=["spy_trades_premarket"])
+    ((start, end),) = source.trade_windows
+    assert start == datetime(2024, 2, 1, 9, 0, tzinfo=UTC)  # 04:00 ET (EST)
+    assert end == DAY.open_utc
+    stored = store.read("spy_trades_premarket", DAY.session_date)
+    assert stored.column("conditions").to_pylist() == [[" ", "T"]]  # unfiltered
+    assert (
+        store.provenance(store.path("spy_trades_premarket", DAY.session_date))["window"]
+        == "04:00 ET to open"
+    )

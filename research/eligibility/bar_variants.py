@@ -61,7 +61,11 @@ def classify(df, day, matrix, unverified_policy):
                 break
             if r["consolidated_last_rule"] == "UNVERIFIED" and unverified_policy == "current":
                 # E-5 proposal: use the earliest later row for this code, flagged
-                later = [x for x in csv.DictReader(open(MATRIX)) if x["condition_code"] == c and x["effective_from"] > str(day)]
+                later = [
+                    x
+                    for x in csv.DictReader(open(MATRIX))
+                    if x["condition_code"] == c and x["effective_from"] > str(day)
+                ]
                 r = later[0] if later else r
             rows.append(r)
         if rows is None:
@@ -112,7 +116,11 @@ def resolve_last_old(df):
     note3 = df["last"].str.contains("NOTE_3", regex=False).to_numpy()
     elig = definite | (note2 & ~prior_definite)
     last_exch = pd.Series(np.where(definite, df["exchange"], None)).ffill().shift(1).to_numpy()
-    elig |= note3 & (~prior_definite | (df["exchange"].to_numpy() == last_exch) | (df["exchange"].to_numpy() == LISTING_MARKET))
+    elig |= note3 & (
+        ~prior_definite
+        | (df["exchange"].to_numpy() == last_exch)
+        | (df["exchange"].to_numpy() == LISTING_MARKET)
+    )
     return elig & ~df["info"].to_numpy()
 
 
@@ -137,11 +145,17 @@ def build(df, hl_variant, vwap_variant):
     hlp = df[df["el_hl"]].groupby("minute")["price"]
     vol = df[df["el_vol"]].groupby("minute")["size"]
     vw = df[df["el_vwap"]].assign(n=lambda x: x["price"] * x["size"]).groupby("minute")
-    out = pd.DataFrame({
-        "open": lastp.first(), "close": lastp.last(), "high": hlp.max(), "low": hlp.min(),
-        "volume": vol.sum(), "trade_count": vol.count(),
-        "vwap": vw["n"].sum() / vw["size"].sum(),
-    })
+    out = pd.DataFrame(
+        {
+            "open": lastp.first(),
+            "close": lastp.last(),
+            "high": hlp.max(),
+            "low": hlp.min(),
+            "volume": vol.sum(),
+            "trade_count": vol.count(),
+            "vwap": vw["n"].sum() / vw["size"].sum(),
+        }
+    )
     return out
 
 
@@ -170,5 +184,16 @@ for d in sample:
             ok = np.isclose(a, o, rtol=0, atol=1e-6 if f != "vwap" else 5e-4) & o.notna()
             totals[name][f][0] += int(ok.sum())
             totals[name][f][1] += len(a)
-report = {v: {f: f"{m}/{n} = {m / n:.4%}" for f, (m, n) in fs.items() if n} for v, fs in totals.items()}
-print(json.dumps({"sessions": [str(d) for d in sample], "unknown_condition_trades": unknown, "match_vs_alpaca": report}, indent=1))
+report = {
+    v: {f: f"{m}/{n} = {m / n:.4%}" for f, (m, n) in fs.items() if n} for v, fs in totals.items()
+}
+print(
+    json.dumps(
+        {
+            "sessions": [str(d) for d in sample],
+            "unknown_condition_trades": unknown,
+            "match_vs_alpaca": report,
+        },
+        indent=1,
+    )
+)

@@ -1,8 +1,9 @@
 """Historical downloader: one shared batch job that fills the Parquet store.
 
 Per session day it stores SPY 1-minute bars (04:00 to close + 4h, with a
-regular-session flag), SPY trades (regular session), the day's option universe,
-and 1-minute bars for that universe. Days already on disk are skipped.
+regular-session flag), SPY trades (regular session), SPY pre-market trades (04:00 ET to
+the open, kept raw for the E-6 pre-market adapter), the day's option universe, and
+1-minute bars for that universe. Days already on disk are skipped.
 """
 
 from __future__ import annotations
@@ -22,7 +23,13 @@ from tournament.marketdata.schemas import CALENDAR_SCHEMA, OPTION_BAR_SCHEMA
 from tournament.marketdata.store import HistoryStore
 
 UNDERLYING = "SPY"
-DATASETS = ("spy_bars_1m", "spy_trades", "option_contracts", "option_bars_1m")
+DATASETS = (
+    "spy_bars_1m",
+    "spy_trades",
+    "spy_trades_premarket",
+    "option_contracts",
+    "option_bars_1m",
+)
 HISTORY_START = date(2024, 2, 1)  # Alpaca options history begins here (MD-11)
 
 
@@ -199,6 +206,16 @@ class Downloader:
                 self.source.stock_trades(UNDERLYING, day.open_utc, day.close_utc),
                 feed="sip",
                 symbol=UNDERLYING,
+            )
+
+        if "spy_trades_premarket" in wanted:
+            # Raw and unfiltered: eligibility is applied later by the adapter, so it can be rerun.
+            save(
+                "spy_trades_premarket",
+                self.source.stock_trades(UNDERLYING, day.extended_start_utc, day.open_utc),
+                feed="sip",
+                symbol=UNDERLYING,
+                window="04:00 ET to open",
             )
 
         if need_universe:

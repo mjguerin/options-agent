@@ -12,7 +12,14 @@ from tournament.marketdata.store import HistoryStore
 
 s = HistoryStore("data/history")
 days = s.days("spy_trades")
-pick = sorted({*(d for d in days if date(2025, 10, 28) <= d <= date(2025, 11, 6)), days[0], days[300], days[-1]})
+pick = sorted(
+    {
+        *(d for d in days if date(2025, 10, 28) <= d <= date(2025, 11, 6)),
+        days[0],
+        days[300],
+        days[-1],
+    }
+)
 bands = [(1, 39), (40, 99), (100, None)]
 print("session      " + "   ".join(f"size {lo}-{hi or '+'}: I share" for lo, hi in bands))
 for d in pick:
