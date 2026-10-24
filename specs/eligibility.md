@@ -142,6 +142,28 @@ Under E-4(a), odd lots alone went from excluding 20.8% of volume to 7.1%, so the
 grew by roughly 14 points of volume at the break. The full population share, net of the other
 excluded codes, wasn't measured; it belongs in the full-history report.
 
+## Pre-market data (`spy_trades_premarket`, downloaded 2026-10-23)
+
+- **Coverage:** 684 / 684 sessions (2024-02-01 to 2026-10-22), 184 MB, every file stamped
+  `352077f`. Kept **raw and unfiltered**, so the adapter can be rerun.
+- **Validation** ([premarket_validate.py](../research/eligibility/premarket_validate.py)): no
+  problems.
+  - Every timestamp is inside 04:00 ET to the open, and every file is sorted.
+  - All tape B; 14,424,527 trades, 990.6M shares.
+  - 10 codes in 17 combinations, **no unknown codes**; 99.97% of trades carry `T`.
+- **E-6 price-eligible share** (literal-YES approximation, before stateful notes): 30.6% of trades,
+  86.5% of volume. Odd lots are 69% of pre-market trades but a small share of volume.
+- **Volume against the provider's pre-market bars**
+  ([premarket_volume_diag.py](../research/eligibility/premarket_volume_diag.py), 20 sessions):
+
+  | Measure | Result |
+  |---|---|
+  | Minutes where the provider has a bar | Volume agrees in **5,391 / 5,393** |
+  | Daily totals | Ours run about 0.3% higher (median) |
+  | Cause | `provider_no_bar_volume_drop`. In **19 / 20** sessions, the daily gap **exactly equals** our volume in minutes where the provider has no bar, and all 1,098 such minutes contain only odd lots. The provider seems to emit no bar, and so no volume, for a minute without a price-eligible trade. That's evidenced exactly on this sample, and matches an Alpaca forum statement, but it isn't documented provider behaviour |
+  | Our design | Deliberately different: SD-03's volume-only slot keeps its volume with null prices |
+  | Residual | 1 session (2025-09-18), 278 shares, the same size as the 2 mismatching minutes; not investigated further |
+
 ## Freeze checklist (owner's list)
 
 1. [x] Conditional state updates use resolved eligibility; ordering claims narrowed (this draft)
@@ -151,7 +173,8 @@ excluded codes, wasn't measured; it belongs in the full-history report.
        informational-state case and observed combination. These come with the bar-builder code
 5. [x] "Zero unexplained" replaced with classified categories and an evidence status
 6. [x] Sample counts and `O` coverage reconciled
-7. [ ] Pre-market trades downloaded, kept raw, and validated (E-6)
+7. [x] Pre-market trades downloaded, kept raw, and validated (E-6). See "Pre-market data" below.
+       Building PMH and PML under the adapter is part of the bar-builder code
 8. [ ] Full-history report: all 684 sessions, stated tolerances, evidence-status categories
 9. [ ] Provenance: OPEN-SRC-1 to 4 resolved where possible (CTS 2.9g; an edition before 2.10a;
        go-live dates; the CTS lifecycle for `M`, `Q` and `9`)
