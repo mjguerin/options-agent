@@ -1,0 +1,105 @@
+# D-04 (A) Source register for trade eligibility. DRAFT, not approved.
+# Copies of every document are archived on the mini at data/sources/ (gitignored; not
+# redistributed). The hashes below identify the exact bytes the matrix was built from.
+
+retrieved_at: "2026-10-24T01:07:25Z"
+retrieved_by: drafter (Claude), via curl from the publisher's public URL
+
+sources:
+  - id: CTS-2.11b
+    title: "Consolidated Tape System (CTS) Pillar Multicast Output Binary Specification"
+    publisher: CTA Plan / SIAC
+    version: "2.11b"
+    version_date: 2026-01-29
+    pdf_creation_date: 2026-03-06
+    url: "https://www.nyse.com/publicdocs/ctaplan/CTS_Pillar_Output_Specification.pdf"
+    sha256: 44609348e4c67ca58d8dd469389e74bc5d399f096dd56cc194816f9108624a72
+    pages: 110
+    applies_to: {feed: CTS, tapes: [A, B]}   # SPY trades are tape B (all 45.7M sampled trades)
+    used_sections:
+      - "Field Descriptions, Sale Condition (p. 82): eligibility chart (Consolidated Last, Consolidated High/Low, Participant Open/Last/High-Low, Volume)"
+      - "Sale Condition notes #1-#4 and multiple-sale-condition rules (p. 83)"
+      - "4-char Sale Condition field, category hierarchy 1-4 (p. 84)"
+      - "Combination notes 1-3 (p. 85)"
+      - "Version history (pp. 4-9) for effective dates"
+    status: current
+
+  - id: CTS-2.12b-ETH
+    title: "CTS Pillar Multicast Output Binary Specification, Extended Trading Hours edition"
+    publisher: CTA Plan / SIAC
+    version: "2.12b"
+    version_date: 2026-05-18   # 2.12 entry; the ETH launch date isn't stated in the table we read
+    pdf_creation_date: 2026-07-10
+    url: "https://www.nyse.com/publicdocs/ctaplan/CTS_Pillar_Output_Specification_ETH.pdf"
+    sha256: 475c7a943ca03bf50f4f58ba3b3825150d93a9548823379baacfaa9b8b4430fd
+    pages: 97
+    applies_to: {feed: CTS, tapes: [A, B]}
+    used_sections:
+      - "Sale Condition eligibility chart: verified byte-identical in text to CTS-2.11b"
+    status: upcoming   # adds overnight price bands; no sale-condition change
+
+  - id: UTP-4.1
+    title: "UTP Data Feed Services Specification (UTDF/UQDF binary output)"
+    publisher: UTP Plan / Nasdaq
+    version: "4.1"
+    pdf_creation_date: 2026-09-02
+    url: "https://www.utpplan.com/DOC/UtpBinaryOutputSpec.pdf"
+    sha256: 68659d2f3ab4057adfad52cc20fb1c51c5b69481865d365014cec237a5399401
+    pages: 61
+    applies_to: {feed: UTDF, tapes: [C]}
+    used_sections:
+      - "2.2: Round Lot changes effective November 3, 2025 (round lot assigned per security)"
+      - "3.14.2 UTP Sale Condition Matrix (p. 48), 3.14.3 Combination Table (p. 50), 3.14.5 Notes (p. 51): registered, not yet transcribed"
+    status: registered_not_applicable   # no tape C symbol in scope (SPY only, MD-10)
+
+  - id: ALPACA-BARS-2022
+    title: "Stock Minute Bars (Alpaca Learn)"
+    publisher: Alpaca
+    version_date: 2022-07-19
+    url: "https://alpaca.markets/learn/stock-minute-bars/"
+    sha256: null   # HTML article, read via fetch; no stable bytes archived
+    used_sections:
+      - "Close-price exclusion list (B, W, 4, 7, 9, C, G, H, I, M, N, P, Q, R, T, U, V, Z)"
+      - "Bars computed 1 s after the minute; recalculated after 30 s for late trades"
+    status: provider_reference   # used only for diagnostics; not a rule source
+
+  - id: ALPACA-RT-STOCK
+    title: "Real-time Stock Data (Alpaca docs)"
+    publisher: Alpaca
+    url: "https://docs.alpaca.markets/us/docs/real-time-stock-pricing-data"
+    sha256: null
+    used_sections:
+      - "Updated bars emitted after each half-minute mark when a late trade arrives"
+      - "Pre-market and after-hours trades are aggregated into minute bars"
+    status: provider_reference
+
+provider_encoding:
+  provider: Alpaca historical and streaming trades
+  fields: {condition_list: c, tape: z, exchange: x, trade_id: i}
+  observed_encoding: >
+    The condition list holds the category-1 character (a space for regular settlement, or C/N/R)
+    followed by each non-space code of categories 2-4, in category order. Example: [" ", "4", "I"]
+    is CTS field " 4 I". Verified against all 42 combinations seen in 70 sampled sessions.
+  per_trade_sip_indicators: >
+    CTS publishes a Consolidated High/Low/Last Indicator on each trade message. Alpaca doesn't
+    pass it through, so eligibility is derived from the conditions and the matrix.
+
+effective_dated_events:   # rule or market-structure changes inside the history (2024-02-01 onward)
+  # date_status: document_date (go-live unverified) | observed_in_data | stated_effective_date
+  - date: 2024-03-28
+    date_status: document_date
+    source: CTS-2.11b version history, v2.10
+    change: "Market Center Opening Trade 'O' made always Last eligible"
+    note: "The implementation date may differ from the document date. The rule before it is not in the documents we hold (needs CTS 2.9g). OPEN-SRC-1"
+  - date: 2024-05-28
+    date_status: stated_effective_date (T+1 start); N reserved-as-input date unverified
+    source: CTS-2.11b version history, v2.10a
+    change: "'N' (Next Day Trade) reserved as input, with the move to T+1 settlement"
+    evidence: "'N' last observed 2024-05-13 in the sampled sessions"
+    note: "Its eligibility before the change isn't in the documents we hold. OPEN-SRC-2"
+  - date: 2025-11-03
+    date_status: stated_effective_date, and observed_in_data
+    source: UTP-4.1 section 2.2; CTS-2.11b v2.11 (round lot size 40 added)
+    change: "Round lots assigned per security by price tier; SPY's became 40 shares"
+    evidence: "SPY trades of 40-99 shares were 100% 'I' through 2025-10-31 and 0% from 2025-11-03"
+    note: "No matrix change: the SIP sets 'I' upstream. More trades are price-eligible from this date on. Disclose this in the held-out replay report"

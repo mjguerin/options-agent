@@ -1,0 +1,119 @@
+# D-04 (C) Minute-bar adapter: how SIP eligibility (cts_sale_conditions.csv + notes.yaml) maps
+# to our SD-03 bar flags. These are APPLICATION policies. Owner decisions are recorded per flag
+# (owner review of 2026-10-24). DRAFT: conditionally approved in principle; not frozen.
+
+version: adapter-v1-draft2
+matrix: cts_sale_conditions.csv
+notes: notes.yaml
+effective_interval_convention: "effective_from inclusive, effective_to exclusive"
+
+processing:   # two stages, per trade, in evaluation order (notes.yaml state.evaluation_order)
+  stage_1_sip: >
+    Resolve consolidated-last, consolidated-high/low and volume eligibility from the matrix and
+    notes, against the pre-trade sip_regular_price_state. Then apply the SIP state transition.
+    No application rule runs in this stage.
+  stage_2_application: >
+    Apply the application flags and exclusions below, and update the bar and VWAP accumulators.
+    Stage 2 never writes SIP state.
+
+ordering:
+  state_evaluation_order: "replay: timestamp, then stored provider order (deterministic approximation); live: stream arrival order"
+  bar_assignment_timestamp: "the trade timestamp provided by Alpaca (field t), floored to the minute"
+  open_close_selection: "first and last eligible trade by (timestamp, stored order) within the minute"
+  claim: "This is not exact CTS dissemination-order reconstruction; historical data has no SIP sequence"
+
+flags:
+  upd_oc:       # bar open / close (regular session)
+    rule: resolved_consolidated_last      # stage 1 result
+    decision: E-1
+    owner: accepted in principle
+  upd_hl:       # bar high / low (regular session)
+    rule: same_as_upd_oc
+    decision: E-2
+    owner: accepted as application policy
+    rationale: >
+      The strategy uses one last-eligible execution-price population for every OHLC field. This
+      deliberately differs from the SIP consolidated-high/low population, to keep minute price
+      features internally consistent. These are NOT SIP consolidated highs and lows. Codes 4, P
+      and Z aren't globally excluded: they contribute whenever their NOTE_2 condition resolves true.
+  upd_vol:      # bar volume (RVOL)
+    rule: resolved_volume
+    decision: E-3
+    owner: accepted in principle
+    counting: >
+      volume = sum of size over volume-eligible execution records in the minute; trade_count =
+      number of those records. Replay counts each record on the final tape once. Live: a cancel
+      removes its original record's size and count, and a correction replaces the original
+      record's values, both in forward state only (SD-01, SD-03). Informational records (E-7)
+      never count.
+  upd_vwap:     # session VWAP (SD-04)
+    rule: same_as_upd_oc
+    population_name: last_eligible_execution_trades
+    decision: E-4
+    owner: "selected (a) for v1"
+    accumulators:
+      vwap_notional: "sum(price x size) over upd_vwap trades, from the open, cumulative"
+      vwap_volume: "sum(size) over upd_vwap trades, cumulative"
+      total_volume: "sum(size) over upd_vol trades, cumulative (a DIFFERENT population)"
+    rule_of_use: >
+      Session VWAP = vwap_notional / vwap_volume. It is never rebuilt from minute VWAP weighted
+      by bar (total) volume, because those populations differ by design.
+
+informational_conditions:   # E-7: excluded from every bar field in stage 2
+  codes: [M, Q, "9"]
+  decision: E-7
+  owner: accepted as application exclusion
+  note: "Excluded from bars only; they still take part in stage-1 SIP state per the matrix (OPEN-SRC-4)"
+
+state_namespaces:
+  sip_regular_price_state: "notes.yaml; regular SIP processing; updated in stage 1 only"
+  application_premarket_price_state: >
+    Pre-market (E-6) only. Its own has_qualifying_last and last_participant, reset at 04:00 ET.
+    It never writes sip_regular_price_state: an adapted pre-market 'qualifying last' doesn't count
+    as a SIP last.
+
+premarket_high_low:   # SD-07 PMH / PML, 04:00 to open; E-6
+  owner: accepted in principle
+  rule: >
+    Application adaptation, not a SIP price rule. T is treated as the expected session marker.
+    Every remaining condition is evaluated under the consolidated-last rule and notes against
+    application_premarket_price_state. Odd lots (I) are therefore excluded.
+  data_gap: "Pre-market trades (04:00-09:30) must be downloaded and kept raw, so the adapter can be rerun"
+
+assumptions:   # E-5: development-only, NOT asserted historical truth
+  - id: OPEN-SRC-1
+    code: O
+    window: {from: 2024-02-01, to_exclusive: 2024-03-28}
+    window_status: "end date = CTS v2.10 document date; go-live unverified"
+    assumed_rule: "the 2.11b row (YES on every consolidated rule)"
+    verification_status: assumed
+    allowed_use: [development]
+    affected_fields: [upd_oc, upd_hl, upd_vwap, sip_regular_price_state]
+    evidence: none in the documents held; needs the CTS edition in force (2.9g)
+    holdout_rule: "Prefer a verified rule. Otherwise disclose the assumption, affected intervals, and whether conclusions depend on it"
+  - id: OPEN-SRC-2
+    code: N
+    window: {from: 2024-02-01, to_exclusive: 2024-05-28}
+    window_status: "end date = T+1 settlement start per CTS v2.10a; go-live unverified"
+    assumed_rule: "price rules NO; volume YES"
+    verification_status: assumed
+    allowed_use: [development]
+    affected_fields: [upd_vol]
+    evidence: >
+      Volume YES is supported on the tested provider data: Alpaca bar volume included N trades in
+      every N-affected minute of the diagnostic. That doesn't independently establish historical
+      CTS eligibility. Price NO has no source; it's assumed from both the old and new reserved
+      meaning.
+    holdout_rule: same as OPEN-SRC-1
+
+late_trades:
+  replay: "the full final tape; each trade goes in the minute of its timestamp (SD-01 event-time approximation)"
+  live: "after finalization, a late trade only enters forward cumulative state (SD-01)"
+  provider_difference:
+    category: likely_provider_finalization_difference
+    root_cause_status: hypothesized_not_verified
+    note: >
+      In about 1.2% of tested minutes, our volume and trade count are higher than the provider's.
+      A trade on the final tape is absent from the provider bar. That is consistent with Alpaca's
+      documented one-time late recalculation, but final historical trades don't show when trades
+      reached the provider, so it isn't proven per minute.

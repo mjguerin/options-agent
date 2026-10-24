@@ -1,0 +1,29 @@
+tape,condition_code,description,cts_category,effective_from,effective_to,effective_date_status,consolidated_last_rule,consolidated_high_low_rule,participant_open_rule,participant_last_rule,participant_high_low_rule,volume_rule,conditional_note_id,source_reference,verification_status,observed_occurrences_sample
+AB,SPACE,Regular Sale,1,2024-02-01,,history_start,YES,YES,NOTE_4,YES,YES,YES,NOTE_4,CTS-2.11b p82,transcribed_cts_2.11b,45703153
+AB,B,Average Price Trade,4,2024-02-01,,history_start,NO,NO,NO,NO,NO,YES,,CTS-2.11b p82,transcribed_cts_2.11b,159213
+AB,C,Cash Trade (Same Day Clearing),1,2024-02-01,,history_start,NO,NO,NO,NO,NO,YES,,CTS-2.11b p82,transcribed_cts_2.11b,985
+AB,E,Automatic Execution,4,2024-02-01,,history_start,YES,YES,NOTE_4,YES,YES,YES,NOTE_4,CTS-2.11b p82,transcribed_cts_2.11b,0
+AB,F,Inter-market Sweep Order,2,2024-02-01,,history_start,YES,YES,NOTE_4,YES,YES,YES,NOTE_4,CTS-2.11b p82,transcribed_cts_2.11b,15647935
+AB,H,Price Variation Trade,4,2024-02-01,,history_start,NO,NO,NO,NO,NO,YES,,CTS-2.11b p82,transcribed_cts_2.11b,0
+AB,I,Odd Lot Trade,4,2024-02-01,,history_start,NO,NO,NO,NO,NO,YES,,CTS-2.11b p82; round lot 40 for SPY from 2025-11-03 (UTP-4.1 s2.2),transcribed_cts_2.11b,25229481
+AB,K,Rule 127 (NYSE) or Rule 155 (NYSE American),4,2024-02-01,,history_start,YES,YES,NOTE_4,YES,YES,YES,NOTE_4,CTS-2.11b p82,transcribed_cts_2.11b,0
+AB,L,Sold Last (Late Reporting),3,2024-02-01,,history_start,NOTE_3,YES,NOTE_4,YES,YES,YES,NOTE_3;NOTE_4,CTS-2.11b p82-83,transcribed_cts_2.11b,0
+AB,M,Market Center Official Close,4,2024-02-01,,history_start,NO,NO,NO,YES,YES,NO,,CTS-2.11b p82,transcribed_cts_2.11b,0
+AB,N,Next Day Trade,1,2024-02-01,2024-05-28,history_start,UNVERIFIED,UNVERIFIED,UNVERIFIED,UNVERIFIED,UNVERIFIED,UNVERIFIED,OPEN-SRC-2,needs CTS edition before 2.10a,unverified_source_gap,273
+AB,N,Reserved,1,2024-05-28,,document_date_go_live_unverified,NO,NO,NO,NO,NO,TBD,,CTS-2.11b p82 and v2.10a,transcribed_cts_2.11b,0
+AB,O,Market Center Opening Trade,2,2024-02-01,2024-03-28,history_start,UNVERIFIED,UNVERIFIED,UNVERIFIED,UNVERIFIED,UNVERIFIED,YES,OPEN-SRC-1,needs CTS 2.9g,unverified_source_gap,7
+AB,O,Market Center Opening Trade,2,2024-03-28,,document_date_go_live_unverified,YES,YES,YES,YES,YES,YES,,CTS-2.11b p82 and v2.10,transcribed_cts_2.11b,126
+AB,P,Prior Reference Price,3,2024-02-01,,history_start,NOTE_2,YES,NOTE_4,NOTE_2,YES,YES,NOTE_2;NOTE_4,CTS-2.11b p82-83,transcribed_cts_2.11b,18
+AB,Q,Market Center Official Open,4,2024-02-01,,history_start,NO,NO,YES,NO,YES,NO,,CTS-2.11b p82,transcribed_cts_2.11b,140
+AB,R,Seller,1,2024-02-01,,history_start,NO,NO,NO,NO,NO,YES,,CTS-2.11b p82,transcribed_cts_2.11b,36
+AB,T,Extended Hours Trade,3,2024-02-01,,history_start,NO,NO,NO,NO,NO,YES,,CTS-2.11b p82,transcribed_cts_2.11b,5972
+AB,U,Extended Hours Sold (Out of Sequence),3,2024-02-01,,history_start,NO,NO,NO,NO,NO,YES,,CTS-2.11b p82,transcribed_cts_2.11b,6
+AB,V,Contingent Trade,4,2024-02-01,,history_start,NO,NO,NO,NO,NO,YES,,CTS-2.11b p82,transcribed_cts_2.11b,34141
+AB,X,Cross/Periodic Auction Trade,4,2024-02-01,,history_start,YES,YES,NOTE_4,YES,YES,YES,NOTE_4,CTS-2.11b p82 (renamed v2.9c),transcribed_cts_2.11b,45
+AB,Z,Sold (Out of Sequence),3,2024-02-01,,history_start,NOTE_2,YES,NOTE_4,NOTE_2,YES,YES,NOTE_2;NOTE_4,CTS-2.11b p82-83,transcribed_cts_2.11b,31481
+AB,4,Derivatively Priced,2,2024-02-01,,history_start,NOTE_2,YES,NOTE_4,NOTE_2,YES,YES,NOTE_2;NOTE_4,CTS-2.11b p82-83,transcribed_cts_2.11b,761963
+AB,5,Market Center Reopening Trade,2,2024-02-01,,history_start,YES,YES,NOTE_4,YES,YES,YES,NOTE_4,CTS-2.11b p82,transcribed_cts_2.11b,0
+AB,6,Market Center Closing Trade,2,2024-02-01,,history_start,YES,YES,NOTE_4,YES,YES,YES,NOTE_4,CTS-2.11b p82,transcribed_cts_2.11b,0
+AB,7,Qualified Contingent Trade,2,2024-02-01,,history_start,NO,NO,NO,NO,NO,YES,,CTS-2.11b p82,transcribed_cts_2.11b,43239
+AB,8,Reserved,2,2024-02-01,,history_start,NO,NO,NO,NO,NO,TBD,,CTS-2.11b p82,transcribed_cts_2.11b,0
+AB,9,Corrected Consolidated Close (per Listing Market),2,2024-02-01,,history_start,YES,YES,NO,NO,NO,NO,,CTS-2.11b p82,transcribed_cts_2.11b,0

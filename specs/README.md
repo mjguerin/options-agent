@@ -18,6 +18,7 @@ is a valid tournament result.
 | [CHANGELOG.md](CHANGELOG.md) | v0.1 → v0.2, with behavioural and editorial changes listed separately |
 | [acceptance_tests.md](acceptance_tests.md) | Synthetic scenarios for the shared components and for every strategy |
 | [consistency.md](consistency.md) | Cross-check of timing, units, identifiers, quotas and exits |
+| [eligibility.md](eligibility.md) | D-04 trade-eligibility deliverable: sources, matrix, adapter decisions E-1 to E-7, evidence |
 | [research_access_log.md](research_access_log.md) | Every inspection of market data made while writing these specs |
 
 ## Scope

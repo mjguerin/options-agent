@@ -88,7 +88,7 @@ assumes every trade of slot m arrived by `finalized_at(m)`. Replay results are l
 ## SD-03 Trade eligibility and bar construction
 
 **Eligibility matrix.** Its construction is a **separate deliverable and approval gate (D-04)**,
-specified in the next subsection. Each trade is classified by the versioned matrix
+specified in the next subsection. The draft deliverable is in [eligibility.md](eligibility.md). Each trade is classified by the versioned matrix
 `eligibility(trade, tape, session_part, rules_version)` into four independent flags:
 
 | Flag | Used for |
@@ -164,8 +164,13 @@ doesn't count as proof.
 
 ## SD-04 VWAP and VWAP displacement
 
-- `VWAP(m)` = Σ notional / Σ volume over `upd_vwap` trades from the open through slot m, reset each
-  session. Pre-market is excluded.
+- **Last-eligible session VWAP** (E-4(a), population `last_eligible_execution_trades`):
+  `VWAP(m) = vwap_notional(m) / vwap_volume(m)`, where both accumulators sum over `upd_vwap` trades
+  (the same population as bar open and close) from the open through slot m. Reset each session;
+  pre-market is excluded.
+- The snapshot persists `vwap_notional`, `vwap_volume` and `total_volume`. `total_volume` uses the
+  `upd_vol` population (odd lots included), a **different** population. So session VWAP is never
+  rebuilt by weighting minute VWAPs with bar volume.
 - VWAP is cumulative, so it carries forward unchanged through a `KNOWN_NO_ELIGIBLE_TRADES` slot,
   once its denominator is positive. A `DATA_MISSING_OR_UNCERTAIN` slot is different: VWAP after it
   is flagged `vwap_uncertain` for the rest of the session. An unknown gap is never converted into

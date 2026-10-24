@@ -85,7 +85,8 @@ Built once per `bar_1m` and shared by all workers (FR-03).
 | `computed_at` | Wall-clock computation time |
 | `feature_version`, `features_config_hash` | |
 | `bar` | The finalized bar object: the single source for OHLC and volume |
-| `vwap` | The only authoritative VWAP value |
+| `vwap` | The only authoritative VWAP value: last-eligible session VWAP (SD-04) |
+| `vwap_notional`, `vwap_volume`, `total_volume` | Cumulative accumulators. VWAP's population differs from `total_volume`'s by design |
 | `disp_30_atr`, `occ_up_30`, `crosses_60`, `regime` | SD-04, SD-09. `regime` ∈ TREND_UP, TREND_DOWN, RANGE, INCOMPLETE, NEUTRAL, or null when NOT_READY |
 | `atr` | `{a_cur, atr_source}` |
 | `rvol` | SD-08 |

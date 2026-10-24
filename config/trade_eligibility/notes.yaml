@@ -1,0 +1,82 @@
+# D-04 (B) Conditional notes and combination rules, transcribed from CTS-2.11b pp. 83-85.
+# The matrix (cts_sale_conditions.csv) refers to these IDs. Rules stay conditional; they are
+# never flattened to booleans. DRAFT, not approved.
+
+scope:
+  evaluated: consolidated columns only (consolidated_last_rule, consolidated_high_low_rule, volume_rule)
+  transcribed_not_evaluated: >
+    The participant columns (participant_open/last/high_low) are transcribed for completeness.
+    Their notes would need per-participant state, which this adapter does NOT implement. No
+    application field uses them.
+
+notes:
+  NOTE_1:
+    source: CTS-2.11b p83
+    text: "YES if it is the only qualifying last, or if it is that Participant's first qualifying last; otherwise NO"
+    status: not used by any current sale condition
+  NOTE_2:
+    source: CTS-2.11b p83
+    text: "YES if it is the only qualifying last; otherwise NO"
+    evaluation: >
+      Consolidated column: YES iff sip_regular_price_state.has_qualifying_last is false BEFORE this
+      trade. Applies to P, Z and 4 in consolidated_last_rule. (The participant-column use is out of
+      scope, see above.)
+  NOTE_3:
+    source: CTS-2.11b p83
+    text: "YES if it is the only qualifying last; or if it is from the same participant as the last; or if it is from the LISTING MARKET for that security; otherwise NO"
+    evaluation: >
+      YES iff, before this trade, has_qualifying_last is false, or the trade's participant equals
+      last_participant, or it equals the listing market (SPY: NYSE Arca, 'P'). Applies to L.
+  NOTE_4:
+    source: CTS-2.11b p83
+    text: "YES if it is the first qualifying or only qualifying trade of the day; otherwise NO"
+    evaluation: participant open only; out of scope
+
+state:
+  namespace: sip_regular_price_state      # separate from application_premarket_price_state (adapter E-6)
+  scope: per security, per trading day
+  fields:
+    has_qualifying_last: "false at day start"
+    last_participant: "null at day start"
+  transition: >
+    After a trade's consolidated-last eligibility is RESOLVED against the pre-trade state (literal
+    YES, or a note that evaluated true), set has_qualifying_last = true and last_participant = that
+    trade's participant. A NO, or a note that evaluated false, changes nothing. A qualifying
+    NOTE_2 trade therefore makes every later NOTE_2 trade that day ineligible.
+  independent_of_application: >
+    State is updated in stage 1, before and regardless of application exclusions (adapter
+    stage 2). For example, '9' (consolidated last YES) updates SIP state even though E-7 keeps it
+    out of our bars. Whether '9', M and Q take part in SIP last processing exactly as the matrix
+    row suggests should be confirmed against the CTS lifecycle text before approval (OPEN-SRC-4).
+  evaluation_order: >
+    In SIP dissemination order where we have it. The historical provider data exposes no CTS
+    sequence number, so replay uses a DETERMINISTIC APPROXIMATION: timestamp, then provider order
+    within a timestamp (the stored order). It is not reconstructed tape order. Live uses arrival
+    order of the stream.
+
+multiple_conditions:
+  source: CTS-2.11b p83
+  rules:
+    - "If every sale condition on a trade qualifies, the trade is included."
+    - "If any condition says NO, NO takes precedence and the trade is excluded."
+    - "If every condition qualifies and one of them carries a note (#2, #3, #4), the note's criteria decide."
+  assumption: "If more than one note is present (e.g., 4 with L), every present note must evaluate true. CTS doesn't state the multi-note case."
+  space_handling: >
+    A space in a category position means 'no condition from this category' and qualifies as
+    Regular Sale (YES in every column). It never overrides another code.
+
+combination_constraints:   # used to validate incoming data, not to decide eligibility
+  source: CTS-2.11b p85
+  rules:
+    - id: C1
+      text: "Sale conditions within the same category are mutually exclusive"
+    - id: C2
+      text: "U can't be combined with any category-2 condition"
+    - id: C3
+      text: "L, O, P and Z are mutually exclusive of each other"
+  violation_policy: "Treat the trade as having an unknown condition (D-36)"
+
+unknown_condition_policy:   # D-36
+  definition: "A code with no matrix row for its tape and date, or a row whose rule is UNVERIFIED or TBD with no applicable override"
+  action: "Quarantine the trade; the slot becomes DATA_MISSING_OR_UNCERTAIN; alert and monitor"
+  overrides: "See minute_bar_adapter.yaml: development-only assumptions, scoped by use (E-5)"
