@@ -40,6 +40,11 @@ class SessionOutput:
     features: pd.DataFrame
     levels: SessionLevels
     premarket_flags: tuple[str, ...]
+    # the exact inputs carried in from earlier sessions (audit, and the Step 2 truncation gate)
+    prior: PriorContext | None = None
+    rvol_baseline: np.ndarray | None = None
+    premarket_high: float | None = None
+    premarket_low: float | None = None
 
 
 class RvolHistory:
@@ -112,10 +117,13 @@ def run_sessions(
                 store.read("spy_trades_premarket", day.session_date), day, elig, usage
             )
             pm_high, pm_low, pm_flags = pm.high, pm.low, pm.flags
+        baseline = rv.baseline()
         features, levels = compute_session_features(
-            bars, sid, prior, pm_high, pm_low, rv.baseline(), fcfg
+            bars, sid, prior, pm_high, pm_low, baseline, fcfg
         )
         if start is None or day.session_date >= start:
-            yield SessionOutput(day, sid, bars, features, levels, pm_flags)
+            yield SessionOutput(
+                day, sid, bars, features, levels, pm_flags, prior, baseline, pm_high, pm_low
+            )
         prior = prior_context_from(bars, features)
         rv.add(bars)

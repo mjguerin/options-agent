@@ -44,22 +44,22 @@ Goal: all five strategies are written down precisely and replay through the same
 
 **Specifications**
 
-- [ ] Write a spec per strategy: thresholds, confirmations, invalidation, exits, re-entry, cooldowns (D05)
+- [x] Write a spec per strategy: thresholds, confirmations, invalidation, exits, re-entry, cooldowns (D05) (draft v0.4 in specs/; approval is part of the gate)
 - [ ] Approve the shared VWAP definition, bar construction and session calendar (MD-05, MD-06)
-- [ ] Define the event, feature-snapshot and candidate schemas (BRD 6.1, 11)
+- [x] Define the event, feature-snapshot and candidate schemas (BRD 6.1, 11) (specs/schemas.md, draft v0.4)
 
 **Data and features**
 
 - [x] Download SPY and SPY option history from February 2024 into daily Parquet files (684 sessions to 2026-10-22, 4.5 GB; verified complete Oct 23, 2026)
-- [ ] Build the event normalizer with gap, duplicate and late-event checks (MD-02, MD-03)
-- [ ] Build the shared feature engine, computing each feature once per event
+- [ ] Build the event normalizer with gap, duplicate and late-event checks (MD-02, MD-03) (historical part done: interval status, gap/uncertainty handling, condition quarantine; live duplicate and late-event handling moves to Step 3's feed handler)
+- [x] Build the shared feature engine, computing each feature once per event
 
 **Replay**
 
-- [ ] Build the replay harness: same feature and strategy interfaces as live (BRD 5.3)
-- [ ] Implement the five strategy workers with the five required outcomes (NOT\_READY to INVALIDATED)
-- [ ] Write no-look-ahead tests on event-time features
-- [ ] Prove determinism: two replays of the same day give identical candidates (AC-03)
+- [x] Build the replay harness: same feature and strategy interfaces as live (BRD 5.3)
+- [x] Implement the five strategy workers with the five required outcomes (NOT\_READY to INVALIDATED)
+- [x] Write no-look-ahead tests on event-time features (feature truncation property test, plus the whole-chain gate check: trades cut at 12 points per session rebuild identical records; 744/744 on Feb–Apr 2024)
+- [x] Prove determinism: two replays of the same day give identical candidates (AC-03) (gate run Oct 25, 2026: 62 sessions, all records identical; traceability 0 failures; report data/reports/step2_gate_2024-02-01_2024-04-30.json)
 
 **Gate:** no look-ahead, every decision traceable to its snapshot, specs approved and tagged.
 

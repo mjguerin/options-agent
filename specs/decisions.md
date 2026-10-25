@@ -56,7 +56,7 @@ Nothing here is approved.
 | D-42 | "close(m − 1)" in crossing rules (ORB, BRT, FBR, VMR) uses the most recent valid close when slot m − 1 had no price | DRAFT (implementation) | strategy workers | The specs assume a priced previous slot |
 | D-43 | BRT/FBR edge identity for quotas is (sorted member levels, side), so a level keeps its quota across zv1 → zv2 | DRAFT (implementation) | brt.py, fbr.py | The specs say "zone edge" without saying how versions relate |
 | D-44 | VPC replacement depth test uses the replacement's own new `A_setup`; the context's failure check uses the old one | DRAFT (implementation) | vpc.py | vpc.md names the old A only for the failure check |
-| D-45 | VPC regime interaction: in Feb–Apr 2024 replay, 61 of 74 VPC setups ended `REGIME_LOST` (TREND_UP tends to drop out as price pulls back toward VWAP) | **OPEN** (owner) | vpc.md, SD-09 | Not a bug. Changing it (for example, requiring TREND_UP only at setup start) is strategy development and a new version |
+| D-45 | VPC keeps its regime requirement as specified for v1: losing TREND_UP (TREND_DOWN for bearish) during a setup cancels it. In Feb–Apr 2024 replay, 61 of 74 VPC setups ended `REGIME_LOST` | **AGREED** (owner, 2026-10-25) | vpc.md, SD-09 | Accepted knowing it makes VPC quieter. A setup-start-only regime rule would be a separate variant and a new version |
 
 ## Kept as stated in the review
 

@@ -30,7 +30,7 @@ from tournament.marketdata.bars import DATA_MISSING_OR_UNCERTAIN, KNOWN_NO_ELIGI
 from tournament.marketdata.eligibility import CONFIG_DIR as ELIGIBILITY_DIR
 from tournament.marketdata.eligibility import Usage
 from tournament.marketdata.store import HistoryStore
-from tournament.replay.ids import digest, run_scoped, signal_key
+from tournament.replay.ids import canonical_json, digest, run_scoped, signal_key
 from tournament.replay.refpos import ReferencePosition, geometry_ok
 from tournament.strategies.base import (
     Block,
@@ -121,12 +121,19 @@ class RunResult:
     transitions: pd.DataFrame
     candidates: pd.DataFrame
     reference_positions: pd.DataFrame
+    snapshots: pd.DataFrame = field(default_factory=pd.DataFrame)
     sessions: list[str] = field(default_factory=list)
 
     def write(self, root: Path) -> Path:
         out = root / self.manifest["run_id"]
         out.mkdir(parents=True, exist_ok=True)
-        for name in ("evaluations", "transitions", "candidates", "reference_positions"):
+        for name in (
+            "evaluations",
+            "transitions",
+            "candidates",
+            "reference_positions",
+            "snapshots",
+        ):
             getattr(self, name).to_parquet(out / f"{name}.parquet", index=False)
         (out / "manifest.json").write_text(json.dumps(self.manifest, indent=1, default=str))
         return out
@@ -156,6 +163,7 @@ class ReplayRun:
         self._tr: list[dict] = []
         self._cand: list[dict] = []
         self._ref: list[dict] = []
+        self._snap: list[dict] = []
         self._sessions: list[str] = []
 
     # ---- public -------------------------------------------------------------------------
@@ -174,7 +182,9 @@ class ReplayRun:
     def _session(self, out: SessionOutput) -> None:
         c = self.common
         f = out.features.reset_index(drop=True)
-        n = len(f)
+        # Session length comes from the CALENDAR, never from how many rows are available: a live
+        # or truncated session must see the same last-entry and cutoff slots as a full replay.
+        n = int((out.day.close_utc - out.day.open_utc) / timedelta(minutes=1))
         floor = c["session"]["floor_slot"]
         last_entry = n - c["session"]["last_entry_min_before_close"]
         cutoff = n - c["session"]["cutoff_min_before_close"]
@@ -182,20 +192,26 @@ class ReplayRun:
         for w in self.workers:
             w.reset_session(out.session_id)
         self._sessions.append(out.session_id)
-        for i in range(n):
+        for i in range(len(f)):
             row = f.iloc[i]
             slot = int(row["slot"])
-            snapshot_id = digest(
+            identity = {
+                "dataset_id": self.dataset_id,
+                "stream_id": "spy_sip_bars",
+                "session_id": out.session_id,
+                "slot": slot,
+                "feature_version": self.features_cfg.version,
+                "features_config_hash": self.features_cfg.config_hash,
+                "values": {k: _clean(row[k]) for k in SNAPSHOT_FIELDS},
+            }
+            snapshot_id = digest(identity, PRICE_FIELDS)
+            self._snap.append(
                 {
-                    "dataset_id": self.dataset_id,
-                    "stream_id": "spy_sip_bars",
+                    "snapshot_id": snapshot_id,
                     "session_id": out.session_id,
                     "slot": slot,
-                    "feature_version": self.features_cfg.version,
-                    "features_config_hash": self.features_cfg.config_hash,
-                    "values": {k: _clean(row[k]) for k in SNAPSHOT_FIELDS},
-                },
-                PRICE_FIELDS,
+                    "identity": canonical_json(identity, PRICE_FIELDS),
+                }
             )
             history = f.iloc[: i + 1]
             status = row["interval_status"]
@@ -509,6 +525,7 @@ class ReplayRun:
                 "transitions": len(self._tr),
                 "candidates": len(self._cand),
                 "reference_positions": len(self._ref),
+                "snapshots": len(self._snap),
             },
         }
         return RunResult(
@@ -517,6 +534,7 @@ class ReplayRun:
             pd.DataFrame(self._tr),
             pd.DataFrame(self._cand),
             pd.DataFrame(self._ref),
+            pd.DataFrame(self._snap),
             list(self._sessions),
         )
 
