@@ -1,0 +1,19 @@
+# VMR: VWAP mean reversion (specs/strategies/vmr.md v0.4). DRAFT parameters.
+strategy_id: vmr
+version: vmr-v1-draft
+required_features: [atr_current, regime]
+params:
+  first_slot: 60
+  ext_min: 6.0          # A
+  exh_tol: 1.0          # A
+  ep_max_age: 30        # slots
+  trig_window: 5        # slots from c
+  stop_buffer: 0.5      # A
+  tgt_frac: 0.75
+  rr_min: 1.0
+  last_entry_slot: 330
+  ft_r: 0.5
+  ft_bars: 8
+  max_hold: 30
+  max_cand_dir: 2
+  swing_k: 2            # must equal features swings.k

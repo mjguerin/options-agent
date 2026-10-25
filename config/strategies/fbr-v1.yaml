@@ -1,0 +1,21 @@
+# FBR: failed-breakout reversal (specs/strategies/fbr.md v0.4). DRAFT parameters.
+strategy_id: fbr
+version: fbr-v1-draft
+required_features: [atr_current, disp_30_atr, zone_version]
+params:
+  first_slot: 31
+  exc_min: 0.5          # A
+  exc_max: 4.0          # A
+  return_window: 15     # slots from m, inclusive
+  return_buffer: 0.1    # A
+  trig_window: 5        # slots after ret_bar
+  trend_block: 2.0      # disp_30_atr (dimensionless)
+  stop_buffer: 0.25     # A
+  rr_min: 1.0
+  fallback_r: 1.5
+  last_entry_slot: 330
+  ft_r: 0.5
+  ft_bars: 10
+  stag_bars: 15
+  max_hold: 45
+  max_cand_session: 2

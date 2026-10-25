@@ -1,0 +1,23 @@
+# VPC: VWAP pullback continuation (specs/strategies/vpc.md v0.4). DRAFT parameters.
+strategy_id: vpc
+version: vpc-v1-draft
+required_features: [atr_current, disp_30_atr, regime, rvol]
+params:
+  first_slot: 31
+  ext_min: 2.0          # A
+  ext_lookback: 59      # p_H >= m - 59
+  pb_zone: 1.0          # A
+  pb_max_depth: 0.5     # A
+  setup_max_age: 60     # slots from p_H
+  trig_buffer: 0.05     # A
+  trig_window: 15       # slots from c
+  rvol_min: 1.0
+  rr_min: 1.0
+  stop_buffer: 0.25     # A
+  trail_activate_r: 1.0
+  ft_r: 0.5
+  ft_bars: 10
+  stag_bars: 15
+  max_hold: 45
+  max_cand_dir: 2
+  swing_k: 2            # must equal features swings.k

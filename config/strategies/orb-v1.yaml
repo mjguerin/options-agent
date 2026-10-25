@@ -1,0 +1,18 @@
+# ORB: opening-range breakout (specs/strategies/orb.md v0.4). DRAFT parameters.
+strategy_id: orb
+version: orb-v1-draft
+required_features: [atr_current, rvol]
+params:
+  w_min: 3.0            # A_OR
+  w_max: 10.0
+  last_entry_slot: 120
+  brk_buffer: 0.10      # A_OR
+  rvol_min: 1.5
+  inv_frac: 0.25        # x W
+  tgt_mult: 1.0         # x W
+  rr_min: 1.0           # x r_u
+  trail_activate_r: 1.0
+  stop_buffer: 0.25     # A_setup (A_cur at the trigger)
+  ft_r: 0.5
+  ft_bars: 10
+  max_hold: 60

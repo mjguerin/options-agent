@@ -1,0 +1,21 @@
+# BRT: break-and-retest continuation (specs/strategies/brt.md v0.4). DRAFT parameters.
+strategy_id: brt
+version: brt-v1-draft
+required_features: [atr_current, rvol, zone_version]
+params:
+  brk_min: 0.25         # A
+  rvol_min: 1.2
+  chase_max: 4.0        # A
+  retest_window: 30     # slots from the break
+  retest_tol: 0.5       # A
+  retest_depth: 0.5     # A
+  retest_wick_max: 1.0  # A
+  hold_window: 10       # slots from r0
+  stop_buffer: 0.25     # A
+  next_level_max: 6.0   # A
+  fallback_r: 2.0
+  rr_min: 1.2
+  trail_activate_r: 1.0
+  ft_r: 0.5
+  ft_bars: 10
+  max_hold: 45
