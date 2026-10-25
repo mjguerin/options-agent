@@ -1,0 +1,25 @@
+# Common session rules for every strategy (specs/shared.md SD-01, SD-10, SD-11). DRAFT until
+# the specs are approved. Changing a value creates a new version and evaluation segment (FR-09).
+
+version: common-v1-draft
+spec_version: specs-v0.4
+
+clock:
+  finalize_delay_s: 2              # SD-01, D-03
+  candidate_ttl_s: 60              # SD-10, D-37: expiry = scheduled finalization + ttl
+  clock_model: event_time_finalize_2s
+
+session:
+  floor_slot: 15                   # SD-10, D-08: no candidate before 09:45 ET
+  last_entry_min_before_close: 30  # last candidate on the slot ending close - 30 min
+  cutoff_min_before_close: 10      # SESSION_CUTOFF on the slot ending close - 10 min
+  cooldown_slots: 5                # after a reference exit on slot j: no candidate on j+1..j+5
+
+exit_precedence:                   # SD-11 (reference exits only; execution exits are Step 3)
+  - SESSION_CUTOFF
+  - INVALIDATION
+  - TARGET
+  - TRAIL
+  - FOLLOW_THROUGH
+  - STAGNATION
+  - MAX_HOLD
