@@ -1,0 +1,32 @@
+# Shared feature parameters (specs/shared.md SD-04 to SD-09, SD-14). DRAFT: these become
+# features-v1 when the specs are approved. Changing any value is a new feature version (FR-09).
+
+feature_version: features-v1-draft
+spec_version: specs-v0.4
+
+atr:            # SD-05
+  period: 14
+  min_valid_tr_to_init: 14
+
+vwap:           # SD-04
+  displacement_window: 30          # slots; first value at slot window + 1
+
+regime:         # SD-09 (thresholds are hypotheses, Q-SD-1 / D-30)
+  occupancy_window: 30
+  min_valid_closes: 27
+  crosses_window: 60
+  trend_disp: 1.5
+  trend_occ: 0.80
+  range_disp: 0.75
+  range_crosses: 2
+
+swings:         # SD-06
+  k: 2
+
+levels:         # SD-07
+  opening_range_slots: 15
+  cluster_gap_atr: 1.0
+
+rvol:           # SD-08
+  reference_sessions: 20
+  full_session_slots: 390          # only full-length sessions enter the baseline
