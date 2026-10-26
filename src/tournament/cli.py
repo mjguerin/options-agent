@@ -144,7 +144,10 @@ def _feed_run(args: argparse.Namespace) -> int:
             return 0
     out_root = Path(os.environ.get("TOURNAMENT_DATA_DIR", REPO_ROOT / "data")) / "live"
     try:
-        s = run_session(day, mode, creds.key_id, creds.secret_key, out_root)
+        from tournament.marketdata.store import HistoryStore
+
+        store = HistoryStore(_history_root()) if args.decisions else None
+        s = run_session(day, mode, creds.key_id, creds.secret_key, out_root, store)
     except (FeedGuardError, FatalStreamError) as exc:
         print(f"Feed stopped: {exc}", file=sys.stderr)
         return 1
@@ -202,6 +205,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--test-minutes",
         type=int,
         help="use Alpaca's test stream for a synthetic N-minute session instead",
+    )
+    run.add_argument(
+        "--no-decisions",
+        dest="decisions",
+        action="store_false",
+        help="record the feed only; don't run the five workers",
     )
     run.set_defaults(func=_feed_run)
     return parser

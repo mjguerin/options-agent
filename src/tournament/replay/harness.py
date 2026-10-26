@@ -115,6 +115,17 @@ class _WorkerState:
 
 
 @dataclass
+class SessionRun:
+    """Per-session constants and per-worker state held between steps."""
+
+    n: int
+    floor: int
+    last_entry: int
+    cutoff: int
+    states: dict
+
+
+@dataclass
 class RunResult:
     manifest: dict
     evaluations: pd.DataFrame
@@ -165,6 +176,7 @@ class ReplayRun:
         self._ref: list[dict] = []
         self._snap: list[dict] = []
         self._sessions: list[str] = []
+        self._finalized_at: pd.Timestamp | None = None
 
     # ---- public -------------------------------------------------------------------------
     def run_store(
@@ -180,57 +192,77 @@ class ReplayRun:
 
     # ---- per session --------------------------------------------------------------------
     def _session(self, out: SessionOutput) -> None:
-        c = self.common
+        run = self.begin_session(out.day, out.session_id)
         f = out.features.reset_index(drop=True)
+        for i in range(len(f)):
+            self.step(run, out, f, i)
+
+    def begin_session(self, day, session_id: str) -> SessionRun:
+        """Start a session: reset the workers and fix the session's clock-derived slots."""
+        c = self.common
         # Session length comes from the CALENDAR, never from how many rows are available: a live
         # or truncated session must see the same last-entry and cutoff slots as a full replay.
-        n = int((out.day.close_utc - out.day.open_utc) / timedelta(minutes=1))
-        floor = c["session"]["floor_slot"]
-        last_entry = n - c["session"]["last_entry_min_before_close"]
-        cutoff = n - c["session"]["cutoff_min_before_close"]
-        states = {w.strategy_id: _WorkerState() for w in self.workers}
+        n = int((day.close_utc - day.open_utc) / timedelta(minutes=1))
         for w in self.workers:
-            w.reset_session(out.session_id)
-        self._sessions.append(out.session_id)
-        for i in range(len(f)):
-            row = f.iloc[i]
-            slot = int(row["slot"])
-            identity = {
-                "dataset_id": self.dataset_id,
-                "stream_id": "spy_sip_bars",
+            w.reset_session(session_id)
+        self._sessions.append(session_id)
+        return SessionRun(
+            n,
+            c["session"]["floor_slot"],
+            n - c["session"]["last_entry_min_before_close"],
+            n - c["session"]["cutoff_min_before_close"],
+            {w.strategy_id: _WorkerState() for w in self.workers},
+        )
+
+    def step(
+        self,
+        run: SessionRun,
+        out: SessionOutput,
+        f: pd.DataFrame,
+        i: int,
+        finalized_at: pd.Timestamp | None = None,
+    ) -> None:
+        """Process row i of `f` (the features of slots 1..i+1). `finalized_at` is the actual
+        snapshot time in live runs; replay leaves it None and models it (SD-01)."""
+        self._finalized_at = finalized_at
+        row = f.iloc[i]
+        slot = int(row["slot"])
+        identity = {
+            "dataset_id": self.dataset_id,
+            "stream_id": "spy_sip_bars",
+            "session_id": out.session_id,
+            "slot": slot,
+            "feature_version": self.features_cfg.version,
+            "features_config_hash": self.features_cfg.config_hash,
+            "values": {k: _clean(row[k]) for k in SNAPSHOT_FIELDS},
+        }
+        snapshot_id = digest(identity, PRICE_FIELDS)
+        self._snap.append(
+            {
+                "snapshot_id": snapshot_id,
                 "session_id": out.session_id,
                 "slot": slot,
-                "feature_version": self.features_cfg.version,
-                "features_config_hash": self.features_cfg.config_hash,
-                "values": {k: _clean(row[k]) for k in SNAPSHOT_FIELDS},
+                "identity": canonical_json(identity, PRICE_FIELDS),
             }
-            snapshot_id = digest(identity, PRICE_FIELDS)
-            self._snap.append(
-                {
-                    "snapshot_id": snapshot_id,
-                    "session_id": out.session_id,
-                    "slot": slot,
-                    "identity": canonical_json(identity, PRICE_FIELDS),
-                }
+        )
+        history = f.iloc[: i + 1]
+        status = row["interval_status"]
+        cancel = status if status in (DATA_MISSING_OR_UNCERTAIN, HALTED) else None
+        for w in self.workers:
+            self._worker_slot(
+                w,
+                run.states[w.strategy_id],
+                out,
+                row,
+                slot,
+                run.n,
+                run.floor,
+                run.last_entry,
+                run.cutoff,
+                history,
+                cancel,
+                snapshot_id,
             )
-            history = f.iloc[: i + 1]
-            status = row["interval_status"]
-            cancel = status if status in (DATA_MISSING_OR_UNCERTAIN, HALTED) else None
-            for w in self.workers:
-                self._worker_slot(
-                    w,
-                    states[w.strategy_id],
-                    out,
-                    row,
-                    slot,
-                    n,
-                    floor,
-                    last_entry,
-                    cutoff,
-                    history,
-                    cancel,
-                    snapshot_id,
-                )
 
     def _worker_slot(
         self, w, st, out, row, slot, n, floor, last_entry, cutoff, history, cancel, snapshot_id
@@ -388,7 +420,9 @@ class ReplayRun:
         cid = run_scoped(self.run_id, "candidate", signal_key=skey)
         bar_end = pd.Timestamp(row["bar_end"])
         scheduled = bar_end + timedelta(seconds=c["clock"]["finalize_delay_s"])
-        available = scheduled  # replay: modeled availability = scheduled finalization (SD-01)
+        # replay: modeled availability = scheduled finalization; live: the actual snapshot time,
+        # so a late snapshot is never submission-eligible (D-37, SD-01)
+        available = scheduled if self._finalized_at is None else max(scheduled, self._finalized_at)
         expires = scheduled + timedelta(seconds=c["clock"]["candidate_ttl_s"])
         self._cand.append(
             {

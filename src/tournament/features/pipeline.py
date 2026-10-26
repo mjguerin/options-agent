@@ -87,6 +87,43 @@ def calendar_days(store: HistoryStore) -> list[SessionDay]:
     ]
 
 
+def carry_context(
+    store: HistoryStore,
+    usage: Usage,
+    before: date,
+    eligibility: EligibilityConfig | None = None,
+    features_cfg: FeatureConfig | None = None,
+) -> tuple[PriorContext, np.ndarray]:
+    """What a session on `before` inherits: the prior-session context and the RVOL baseline,
+    built from every stored session earlier than it. Equals the `prior` and `rvol_baseline` that
+    `run_sessions` attaches to that session (tested), so live and replay start from the same
+    inputs. Slow (it rebuilds every earlier session): run it before the open."""
+    elig = eligibility or EligibilityConfig()
+    fcfg = features_cfg or FeatureConfig.load()
+    rv = RvolHistory(fcfg["rvol"]["reference_sessions"], fcfg["rvol"]["full_session_slots"])
+    prior = PriorContext()
+    for day in calendar_days(store):
+        if day.session_date >= before:
+            break
+        if not store.has("spy_trades", day.session_date):
+            continue
+        bars = build_session_bars(
+            store.read("spy_trades", day.session_date), day, elig, usage
+        ).to_pandas()
+        pm_high = pm_low = None
+        if store.has("spy_trades_premarket", day.session_date):
+            pm = premarket_levels(
+                store.read("spy_trades_premarket", day.session_date), day, elig, usage
+            )
+            pm_high, pm_low = pm.high, pm.low
+        features, _ = compute_session_features(
+            bars, f"XNYS-{day.session_date}", prior, pm_high, pm_low, rv.baseline(), fcfg
+        )
+        prior = prior_context_from(bars, features)
+        rv.add(bars)
+    return prior, rv.baseline()
+
+
 def run_sessions(
     store: HistoryStore,
     usage: Usage,

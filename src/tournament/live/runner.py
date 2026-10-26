@@ -18,10 +18,13 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from tournament.features.pipeline import calendar_days, carry_context
+from tournament.live.engine import ShadowEngine
 from tournament.live.session import LiveSession
 from tournament.live.stream import AlpacaStockStream
 from tournament.marketdata.calendar import SessionDay
-from tournament.marketdata.eligibility import EligibilityConfig
+from tournament.marketdata.eligibility import EligibilityConfig, Usage
+from tournament.marketdata.store import HistoryStore
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CONFIG = REPO_ROOT / "config" / "live" / "feed-v1.yaml"
@@ -39,8 +42,39 @@ def synthetic_session(minutes: int, now: datetime) -> SessionDay:
     return SessionDay(open_utc.date(), open_utc, open_utc + timedelta(minutes=minutes))
 
 
+def all_workers() -> list:
+    from tournament.strategies.brt import BRT
+    from tournament.strategies.fbr import FBR
+    from tournament.strategies.orb import ORB
+    from tournament.strategies.vmr import VMR
+    from tournament.strategies.vpc import VPC
+
+    return [VPC(), ORB(), BRT(), FBR(), VMR()]
+
+
+def make_engine(
+    session: LiveSession, store: HistoryStore | None, day: SessionDay
+) -> ShadowEngine | None:
+    """The shadow engine needs the context of the previous session: the store must hold every
+    session before today. Otherwise the feed is recorded without decisions (and says why)."""
+    if store is None:
+        return None
+    earlier = [d.session_date for d in calendar_days(store) if d.session_date < day.session_date]
+    if not earlier or not store.has("spy_trades", earlier[-1]):
+        log.warning("history is missing the session before %s: recording without decisions",
+                    day.session_date)  # fmt: skip
+        return None
+    prior, baseline = carry_context(store, Usage.LIVE, day.session_date)
+    return ShadowEngine(session, all_workers(), prior, baseline, usage=Usage.LIVE)
+
+
 def run_session(
-    day: SessionDay, mode: str, key_id: str, secret: str, out_root: Path
+    day: SessionDay,
+    mode: str,
+    key_id: str,
+    secret: str,
+    out_root: Path,
+    store: HistoryStore | None = None,
 ) -> LiveSession:
     fc = load_feed_config()
     delay_s = yaml.safe_load(COMMON.read_text())["clock"]["finalize_delay_s"]
@@ -63,6 +97,7 @@ def run_session(
             r["trades_total"],
         ),  # fmt: skip
     )
+    engine = make_engine(session, store, day) if mode == "shadow" else None
     until = pd.Timestamp(day.close_utc) + session.delay + pd.Timedelta(seconds=1)
     with (out / "stream.jsonl").open("a") as journal:
 
@@ -85,11 +120,17 @@ def run_session(
         )
         asyncio.run(stream.run(until))
     session.tick(until)
-    write_outputs(session, out, mode, stream.connects)
+    write_outputs(session, out, mode, stream.connects, engine)
     return session
 
 
-def write_outputs(session: LiveSession, out: Path, mode: str, connects: int) -> None:
+def write_outputs(
+    session: LiveSession,
+    out: Path,
+    mode: str,
+    connects: int,
+    engine: ShadowEngine | None = None,
+) -> None:
     bars = pd.DataFrame(session.bars)
     if not bars.empty:
         bars["late_adjustment"] = bars["late_adjustment"].map(list)
@@ -115,6 +156,22 @@ def write_outputs(session: LiveSession, out: Path, mode: str, connects: int) -> 
         "halts": iv(session.health.halts),
         "premarket": asdict(pm) if pm else None,
     }
+    if engine is not None:
+        result = engine.result()
+        result.write(out / "records")
+        lat = engine.latencies
+        summary["engine"] = {
+            "error": engine.error,
+            "slots_decided": engine.stepped,
+            "run_id": result.manifest["run_id"],
+            "counts": result.manifest["counts"],
+            "step_latency_ms_p50_max": [
+                round(1000 * sorted(lat)[len(lat) // 2]),
+                round(1000 * max(lat)),
+            ]
+            if lat
+            else None,
+        }
     (out / "summary.json").write_text(json.dumps(summary, indent=1, default=str))
 
 
