@@ -8,6 +8,8 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
+import pandas as pd
+
 from tournament.appconfig import app_config
 from tournament.secrets import (
     InsecureEnvFileError,
@@ -234,6 +236,49 @@ def _ops_render(args: argparse.Namespace) -> int:
     return 0
 
 
+def _alerts_run(args: argparse.Namespace) -> int:
+    import logging
+
+    from tournament.alerts.run import run_bot
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    try:
+        return run_bot(REPO_ROOT)
+    except (MissingCredentialsError, InsecureEnvFileError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+
+def _alerts_test(args: argparse.Namespace) -> int:
+    from tournament.alerts.config import load_alerts_config
+    from tournament.alerts.telegram import TelegramSender
+    from tournament.secrets import load_telegram_credentials
+
+    try:
+        sender = TelegramSender(load_telegram_credentials(), load_alerts_config().telegram)
+    except (MissingCredentialsError, InsecureEnvFileError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    res = sender.send(args.message)
+    print("sent" if res.ok else f"FAILED: {res.error}")
+    return 0 if res.ok else 1
+
+
+def _alerts_status(args: argparse.Namespace) -> int:
+    from tournament.alerts.config import load_alerts_config
+    from tournament.alerts.store import AlertStore
+    from tournament.orders.store import default_engine
+
+    store = AlertStore(default_engine(), load_alerts_config())
+    open_ = store.open_incidents()
+    print(f"{len(open_)} open incident(s)")
+    for i in open_:
+        since = f"{i.opened_at:%H:%M:%S}"
+        print(f"  [{i.severity}] {i.kind} {i.account or ''} since {since} UTC: {i.detail}")
+    print(f"{len(store.due(pd.Timestamp.now(tz='UTC'), 1000))} alert(s) waiting to be sent")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tournament")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -312,6 +357,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="don't collect OPRA option quotes",
     )
     run.set_defaults(func=_feed_run)
+
+    al = sub.add_parser("alerts", help="the Telegram alert bot")
+    al_sub = al.add_subparsers(dest="alerts_command", required=True)
+    al_sub.add_parser("run", help="deliver alerts and run the watchdogs").set_defaults(
+        func=_alerts_run
+    )
+    test = al_sub.add_parser("test", help="send one message to check the token and chat ID")
+    test.add_argument("--message", default="Options tournament: alert bot test message")
+    test.set_defaults(func=_alerts_test)
+    al_sub.add_parser("status", help="open incidents and waiting alerts").set_defaults(
+        func=_alerts_status
+    )
 
     eng = sub.add_parser("engine", help="the daily engine job (started by Supervisor)")
     eng_sub = eng.add_subparsers(dest="engine_command", required=True)

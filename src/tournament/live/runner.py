@@ -18,6 +18,10 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from tournament.alerts.bot import heartbeat_path
+from tournament.alerts.config import load_alerts_config
+from tournament.alerts.incidents import Incidents
+from tournament.alerts.monitor import SessionMonitor
 from tournament.appconfig import app_config
 from tournament.features.pipeline import calendar_days, carry_context
 from tournament.live.engine import ShadowEngine
@@ -134,6 +138,10 @@ def run_session(
             r["trades_total"],
         ),  # fmt: skip
     )
+    acfg = incidents = None
+    if mode == "shadow" and fc["alerts"]["enabled"]:
+        acfg = load_alerts_config()
+        incidents = Incidents.from_config(acfg)
     preflight_report = None
     if manifest is not None:
         from tournament.accounts.manifest import preflight
@@ -148,6 +156,10 @@ def run_session(
         for c in result.failures:
             log.warning("preflight %s: %s %s", "FAIL" if c.blocking else "warn", c.name, c.detail)
         if not result.passed:
+            if incidents is not None:
+                now = pd.Timestamp.now(tz="UTC")
+                names = ", ".join(c.name for c in result.failures if c.blocking)
+                incidents.open(now, "PREFLIGHT_FAILED", names)
             raise PreflightFailed(preflight_report)
     engine = make_engine(session, store, day) if mode == "shadow" else None
     collector = None
@@ -184,6 +196,26 @@ def run_session(
         except Exception as exc:  # noqa: BLE001 - recording must go on without the accounts
             log.exception("shadow accounts not started: %s", exc)
             accounts = None
+    monitor = None
+    if incidents is not None:
+        monitor = SessionMonitor(
+            incidents,
+            acfg,
+            session,
+            heartbeat_path(REPO_ROOT, acfg.heartbeat.file),
+            mode,
+            collector,
+            engine,
+            accounts,
+        )
+
+    def on_tick(now: pd.Timestamp) -> None:
+        session.tick(now)
+        if accounts is not None:
+            accounts.tick(now)
+        if monitor is not None:
+            monitor.tick(now)
+
     if collector is not None:
         previous = session.on_bar
 
@@ -210,9 +242,7 @@ def run_session(
             on_messages=session.on_messages,
             on_connected=session.on_connected,
             on_disconnected=session.on_disconnected,
-            on_tick=(lambda now: (session.tick(now), accounts.tick(now)))
-            if accounts is not None
-            else session.tick,
+            on_tick=on_tick,
             on_frame=record,
             tick_s=fc["tick_s"],
             backoff_s=tuple(fc["reconnect_backoff_s"]),
@@ -234,6 +264,9 @@ def run_session(
             write_outputs(
                 session, out, mode, stream.connects, engine, collector, accounts, preflight_report
             )
+            if monitor is not None:
+                monitor.tick(pd.Timestamp.now(tz="UTC"))
+                monitor.finish(pd.Timestamp.now(tz="UTC"))
     return session
 
 

@@ -15,6 +15,9 @@ shutdown_grace_s: 1         # keep running this long after close + finalize dela
 synthetic_session_lead_min: 1  # the test feed's session starts this many minutes ahead
 spot_feed: sip              # feed for the latest SPY price at startup
 
+alerts:
+  enabled: true                      # write incidents and heartbeats (config/alerts)
+
 shadow_accounts:                    # modeled paper accounts in shadow mode (orders/sim.py)
   enabled: true
   starting_balance_usd: 10000       # equal for every strategy (FR-06, FR-13)

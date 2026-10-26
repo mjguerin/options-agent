@@ -43,6 +43,17 @@ class AlpacaCredentials:
     __str__ = __repr__
 
 
+@dataclass(frozen=True)
+class TelegramCredentials:
+    bot_token: str
+    chat_id: str
+
+    def __repr__(self) -> str:
+        return "TelegramCredentials(bot_token=***, chat_id=***)"
+
+    __str__ = __repr__
+
+
 def env_file() -> Path:
     return Path(os.environ.get("TOURNAMENT_ENV_FILE", DEFAULT_ENV_FILE))
 
@@ -74,3 +85,16 @@ def load_alpaca_credentials(account_alias: str, path: Path | None = None) -> Alp
             f"{path} has no {key_var} and {secret_var} for account alias {account_alias!r}"
         )
     return AlpacaCredentials(account_alias, key_id, secret_key)
+
+
+def load_telegram_credentials(path: Path | None = None) -> TelegramCredentials:
+    """The alert bot's token and the owner's chat ID (alerts go to one chat only)."""
+    path = path or env_file()
+    if not path.is_file():
+        raise MissingCredentialsError(f"No {path}. See .env.example for the Telegram variables")
+    _check_permissions(path)
+    values = dotenv_values(path)
+    token, chat = values.get("TELEGRAM_BOT_TOKEN"), values.get("TELEGRAM_CHAT_ID")
+    if not token or not chat:
+        raise MissingCredentialsError(f"{path} has no TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID")
+    return TelegramCredentials(token, chat)

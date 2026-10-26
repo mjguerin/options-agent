@@ -94,7 +94,7 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 - [ ] Supervisor programs: engine at a fixed pre-market time, API, dashboard, alert bot (engine program, nightly job and installer built and tested, D-67 to D-69; waiting for the owner to run `sudo ops/host/setup_jobs.sh`; the API, dashboard and alert bot programs come with those items)
 - [ ] FastAPI controls: pause, resume, cancel, close, flatten, emergency (BRD 14)
 - [ ] Streamlit dashboard bound to localhost; reach it through an SSH tunnel
-- [ ] Telegram alert bot in deterministic code
+- [ ] Telegram alert bot in deterministic code (built Oct 26, 2026: incidents and outbox in PostgreSQL migration 0003, sender, bot with watchdogs, engine-side monitor, Supervisor program, D-70 to D-72 drafts, 24 tests with a fake sender; waiting for TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env to send the first real message)
 - [ ] Evaluation ledger beside the broker ledger (BRD 12.3)
 
 **Agent**

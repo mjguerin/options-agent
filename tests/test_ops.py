@@ -176,6 +176,14 @@ def test_every_job_file_renders_without_placeholders(rendered):
         assert "__" not in f.read_text().replace("__main__", "")
 
 
+def test_the_alert_bot_runs_all_day_and_restarts_itself(rendered):
+    cp = configparser.RawConfigParser()
+    cp.read(rendered["supervisord.conf"])
+    p = cp["program:alerts"]
+    assert p["autostart"] == "true" and p["autorestart"] == "true"
+    assert "tournament alerts run" in p["command"]
+
+
 def test_the_engine_program_follows_the_app_config(rendered):
     cp = configparser.RawConfigParser()
     cp.read(rendered["supervisord.conf"])

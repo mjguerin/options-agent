@@ -1,0 +1,109 @@
+# Operations alerts (BRD 10.5, 14; AG-09). DRAFT. Deterministic code: it fires without the agent.
+#
+# The engine writes incidents and alert messages to the database; a separate program, the alert
+# bot, sends them to Telegram and also watches the things a dead engine can't report about
+# itself. Every number and every message is data here. No defaults in code.
+
+version: alerts-v1-draft
+
+telegram:
+  api_base: https://api.telegram.org
+  timeout_s: 10
+
+delivery:
+  poll_s: 5                          # how often the bot looks for unsent alerts
+  max_per_minute: 20                 # more than this are held for the next minute
+  retry_backoff_s: [5, 15, 60, 300]  # waits after a failed send; the last one repeats
+  expire_after_s: 3600               # an alert still unsent after this is dropped, with a note
+  min_severity: info                 # info | warning | critical: nothing below is sent
+  repeat_open_critical_s: 900        # a critical incident that stays open is repeated this often
+  session_summary: true              # a short message after each session
+
+monitor:                             # the engine-side checks, run once a second
+  feed_down_grace_s: 10              # a feed must stay down this long before it is an incident
+  flat_deadline_min_before_close: 5  # anything still held after close - 5 min is an incident (SD-10)
+
+heartbeat:
+  file: data/run/engine.heartbeat.json
+  every_s: 5
+
+watchdog:                            # checks the bot runs itself, on the host
+  check_every_s: 30
+  engine_heartbeat_max_age_s: 90     # no heartbeat for this long during the session = engine down
+  engine_grace_after_start_s: 300    # the engine gets this long after its start time
+  nightly_deadline_after_s: 10800    # the nightly job must have reported within 3 h of its start
+  backup_log: ~/Library/Logs/options-tournament/backup.log
+  backup_max_age_h: 26
+  min_free_disk_gb: 20
+  disk_path: data
+
+# What each incident kind says and how loudly. {account} and {detail} are filled at the time.
+kinds:
+  STOCK_FEED_DOWN:
+    severity: critical
+    open: "SPY feed down: {detail}. Entries are blocked; positions are still managed."
+    resolved: "SPY feed is back."
+  OPTION_FEED_DOWN:
+    severity: critical
+    open: "Option quote feed unusable: {detail}. No new entries."
+    resolved: "Option quote feed is back."
+  OPTION_FEED_FAILED:
+    severity: critical
+    open: "Option feed could not start: {detail}. The session records SPY only."
+    resolved: "Option feed started."
+  ENGINE_ERROR:
+    severity: critical
+    open: "Decision engine stopped: {detail}. The feed keeps recording."
+    resolved: "Decision engine running again."
+  ACCOUNT_ERROR:
+    severity: critical
+    open: "Account {account} failed: {detail}"
+    resolved: "Account {account} recovered."
+  DAILY_LIMIT_HALT:
+    severity: warning
+    open: "{account} reached the daily loss limit ({detail}). New entries halted for the day."
+    resolved: "{account} daily limit cleared."
+  ENTRIES_BLOCKED:
+    severity: critical
+    open: "{account} entries blocked: {detail}"
+    resolved: "{account} entries unblocked."
+  RESIDUAL_EXPOSURE:
+    severity: critical
+    open: "{account} still holds {detail} past the flat deadline."
+    resolved: "{account} is flat."
+  UNKNOWN_CONDITION:
+    severity: warning
+    open: "Unknown or unresolved sale condition in SPY trades: {detail}. Slot marked uncertain."
+    resolved: "Sale conditions normal."
+  PREFLIGHT_FAILED:
+    severity: critical
+    open: "Startup preflight failed: {detail}. The engine did not start."
+    resolved: "Preflight passes."
+  ENGINE_SILENT:
+    severity: critical
+    open: "No engine heartbeat for {detail} during the session."
+    resolved: "Engine heartbeat is back."
+  ENGINE_NOT_STARTED:
+    severity: critical
+    open: "The engine has not started today (expected by {detail})."
+    resolved: "The engine is running."
+  NIGHTLY_FAILED:
+    severity: critical
+    open: "Nightly history job: {detail}. Tomorrow's shadow decisions may be missing."
+    resolved: "Nightly history job is fine."
+  BACKUP_STALE:
+    severity: warning
+    open: "Database backup is overdue: {detail}."
+    resolved: "Database backup is current."
+  DISK_LOW:
+    severity: warning
+    open: "Disk space low: {detail}."
+    resolved: "Disk space is fine."
+  DATABASE_DOWN:
+    severity: critical
+    open: "Database unreachable: {detail}."
+    resolved: "Database reachable."
+  SESSION_SUMMARY:
+    severity: info
+    open: "{detail}"
+    resolved: ""

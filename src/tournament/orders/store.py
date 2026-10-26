@@ -73,6 +73,7 @@ order_events = Table(
 def memory_engine() -> Engine:
     """An in-memory SQLite database with every table registered so far, for tests."""
     from tournament.accounts import reservations as _reservations  # noqa: F401
+    from tournament.alerts import store as _alerts  # noqa: F401
 
     engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
