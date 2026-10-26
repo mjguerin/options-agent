@@ -78,7 +78,7 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 
 - [ ] Experiment manager: immutable manifest with git tag, $10,000 balances, risk limits (BRD 10.1)
 - [ ] Account runtimes with per-account risk state and order namespace (FR-01, FR-02)
-- [ ] Risk budget -> contract selection -> quantity pipeline (CS-01A, CS-05)
+- [x] Risk budget -> contract selection -> quantity pipeline (CS-01A, CS-05) (src/tournament/risk: config-driven selection, sizing, daily loss guard and premium stop, 31 tests; wiring into the account runtimes comes with atomic reservation)
 - [ ] Atomic risk reservation, including pending and partial orders (RK-03, FR-07)
 
 **Orders and exits**
@@ -110,8 +110,8 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 
 Goal: prove isolation, risk, execution and accounting on real paper fills with two accounts.
 
-- [ ] Set the per-trade risk budget and daily loss limit (D07); review which SPY deltas that budget allows
-- [ ] Set the expiration and delta policy from that budget (D06)
+- [x] Set the per-trade risk budget and daily loss limit (D07); review which SPY deltas that budget allows (initial values Oct 26, 2026: 20% premium budget, 20% premium stop, $500 daily limit, in config/risk/risk-v1.yaml; the budget allows ATM 0DTE, about 13 contracts at 1.44. Changing them is a new version)
+- [x] Set the expiration and delta policy from that budget (D06) (initial rule: 0DTE, nearest-ATM strike, one contract tried, quantity from the budget; D-57. Revisit after the first shadow weeks)
 - [ ] Approve order types, timeouts and replacement limits (D08)
 - [ ] Create two $10,000 paper accounts for two of the five candidates (FR-13)
 - [ ] Run one to two weeks in shadow, then switch to paper

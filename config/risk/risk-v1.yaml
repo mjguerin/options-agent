@@ -1,0 +1,36 @@
+# Risk, sizing and contract selection for every strategy account (BRD CS-01 to CS-06, RK-01,
+# RK-07; decisions D-55 to D-58). DRAFT: initial values set by the owner on 2026-10-26.
+#
+# Every number here is data, not code. Changing a value creates a new risk version and a new
+# evaluation segment (FR-09): copy this file to risk-v2.yaml, change it, and select it with
+#   TOURNAMENT_RISK_CONFIG=config/risk/risk-v2.yaml
+# The file's hash goes into the experiment manifest and the preflight checks it (AC-21).
+# There are deliberately no built-in defaults: a missing value blocks activation (RK-07).
+
+version: risk-v1-draft
+
+sizing:                              # CS-05
+  premium_budget_pct: 0.20           # of the equity basis, spent on premium per trade
+  equity_basis: start_of_day         # start_of_day | initial (the manifest's $10,000)
+  rounding: floor                    # quantity = floor(budget / premium per contract)
+  min_quantity: 1                    # below this the signal is rejected, never sized up
+  on_quote_size_shortfall: cap       # cap | reject: when the quoted ask size is below quantity
+  contract_multiplier: 100
+
+premium_stop:                        # EX-02; execution-only (D-31): never changes strategy state
+  loss_pct: 0.20                     # exit when the bid falls this far below the entry price
+
+daily_loss:                          # RK-01, D07
+  limit_usd: 500
+  measure: realized_plus_open_at_bid # realized_only | realized_plus_open_at_bid
+  on_breach: halt_entries            # halt_entries | halt_and_flatten (RK-02)
+  unmarked_position: full_loss       # full_loss | entry_cost: an open position with no usable bid
+
+contract_selection:                  # CS-01 to CS-03, CS-07; D06 (initial rule)
+  expiry_days: 0                     # 0 = same-day (0DTE)
+  strike_offset: 0                   # 0 = nearest at-the-money; +1 = one strike in the money;
+                                     # -1 = one strike out of the money
+  max_spread_abs: 0.05               # dollars, ask minus bid
+  max_spread_pct: 0.10               # of the mid price
+  min_ask: 0.05                      # reject dust premiums
+  min_ask_size: 1                    # contracts quoted at the ask
