@@ -1,0 +1,31 @@
+# Dashboard (BRD 14; NFR-14). DRAFT. A single-user Streamlit page on a loopback address,
+# reached through an SSH tunnel:  ssh -L 8501:127.0.0.1:8501 mini
+#
+# It reads the engine's published state and the API; it never touches the broker, the engine or
+# the database directly. Controls go through the API with the owner token. No defaults in code.
+
+version: dashboard-v1-draft
+
+server:
+  host: 127.0.0.1                    # loopback only (the code refuses anything else)
+  port: 8501
+
+api:
+  base_url: http://127.0.0.1:8800    # must be a loopback address too
+  timeout_s: 5
+
+refresh_s: 5                         # live pages redraw this often
+
+data:
+  live_root: data/live               # sessions written by the engine
+  ops_root: data/ops                 # nightly job reports
+
+tables:
+  max_rows: 200
+
+health:                              # what turns an indicator red or amber
+  engine_stale_s: 30                 # no published state for this long = engine not reporting
+  lag_warn_s: 1.0                    # option quote delivery lag p99 above this is amber
+
+controls:
+  confirm_phrase: "{command} {target}"   # what the owner types to confirm; target = account or ALL

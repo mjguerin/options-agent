@@ -30,6 +30,7 @@ class ControlPlane:
         session,
         mode: str,
         collector=None,
+        engine=None,
     ) -> None:
         self.store, self.cfg, self.runtimes = store, cfg, runtimes
         self.state_file, self.session, self.mode, self.collector = (
@@ -38,6 +39,8 @@ class ControlPlane:
             mode,
             collector,
         )
+        self.engine = engine
+        self._last_history: pd.Timestamp | None = None
         self._last_poll: pd.Timestamp | None = None
         self._last_state: pd.Timestamp | None = None
         self.applied = 0
@@ -47,6 +50,10 @@ class ControlPlane:
         if self._last_state is None or now - self._last_state >= every:
             self._last_state = now
             self._publish(now)
+        hist = pd.Timedelta(seconds=self.cfg.state.history_every_s)
+        if self._last_history is None or now - self._last_history >= hist:
+            self._last_history = now
+            self._append_history(now)
         poll = pd.Timedelta(seconds=self.cfg.commands.poll_s)
         if self.store is not None and (self._last_poll is None or now - self._last_poll >= poll):
             self._last_poll = now
@@ -110,6 +117,18 @@ class ControlPlane:
         for binding, rt in self.runtimes.items():
             accounts[binding] = {
                 "strategy": rt.strategy_id,
+                "positions_detail": rt.positions_detail(now),
+                "recent_decisions": [
+                    {
+                        "at": d.at.isoformat() if d.at is not None else None,
+                        "candidate_id": d.candidate_id,
+                        "accepted": d.accepted,
+                        "reasons": list(d.reasons),
+                        "contract": d.selection.symbol if d.selection else None,
+                        "quantity": d.size.quantity if d.size else None,
+                    }
+                    for d in rt.decisions[-self.cfg.state.recent_decisions :]
+                ],
                 "halted": rt.halted,
                 "operator_halt": rt.operator_halt,
                 "entries_blocked": rt.orders.entries_blocked,
@@ -133,7 +152,50 @@ class ControlPlane:
             "slot": s.builder.finalized,
             "feeds": feeds,
             "accounts": accounts,
+            "strategies": self._strategies(),
         }
+
+    def _strategies(self) -> dict:
+        """Each worker's latest evaluation: where its state machine is and why it can't act."""
+        if self.engine is None:
+            return {}
+        out = {}
+        for w in self.engine.harness.workers:
+            r = self.engine.harness.latest_evaluations().get(w.strategy_id)
+            out[w.strategy_id] = {
+                "version": w.version,
+                "config_hash": w.config_hash[:12],
+                "slot": r["slot"] if r else None,
+                "outcome": r["outcome"] if r else None,
+                "setup_state": r["setup_state"] if r else None,
+                "readiness": r["readiness_status"] if r else None,
+                "blocks": list(r["eligibility_blocks"]) if r else [],
+                "reasons": list(r["reason_codes"]) if r else [],
+            }
+        return out
+
+    def _append_history(self, now: pd.Timestamp) -> None:
+        """One line per interval: what the dashboard draws its curves from."""
+        try:
+            d = self.state_file.parent / "state_history"
+            d.mkdir(parents=True, exist_ok=True)
+            row = {
+                "at": now.isoformat(),
+                "accounts": {
+                    b: {
+                        "realized_pnl_usd": round(rt.realized_pnl(), 2),
+                        "unrealized_usd": round(
+                            sum(p["unrealized_usd"] or 0.0 for p in rt.positions_detail(now)), 2
+                        ),
+                        "exposure_usd": round(rt.ledger.exposure_usd(b), 2),
+                    }
+                    for b, rt in self.runtimes.items()
+                },
+            }
+            with (d / f"{self.session.day.session_date.isoformat()}.jsonl").open("a") as f:
+                f.write(json.dumps(row) + "\n")
+        except Exception:  # noqa: BLE001
+            log.exception("could not append the state history")
 
     def _publish(self, now: pd.Timestamp) -> None:
         try:

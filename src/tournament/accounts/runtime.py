@@ -17,7 +17,7 @@ manager, which prevents duplicate liquidations (EX-05).
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Protocol
 
@@ -55,6 +55,7 @@ class EntryDecision:
     selection: Selection | None = None
     size: SizeResult | None = None
     intent: Intent | None = None
+    at: pd.Timestamp | None = None
 
 
 @dataclass
@@ -87,7 +88,7 @@ class AccountRuntime:
     def on_candidate(self, now: pd.Timestamp, cand: dict) -> EntryDecision:
         if cand["account_binding"] != self.binding:
             raise WrongAccount(f"{cand['account_binding']!r} sent to {self.binding!r}")
-        d = self._decide(now, cand)
+        d = replace(self._decide(now, cand), at=now)
         self.decisions.append(d)
         return d
 
@@ -270,6 +271,22 @@ class AccountRuntime:
             bid = v.quote.bid if (v.usable and v.quote is not None) else None
             out.append(OpenPosition(symbol, qty, self._avg_entry(symbol), bid))
         return out
+
+    def positions_detail(self, now: pd.Timestamp) -> list[dict]:
+        """Held positions with the latest usable bid and the open profit or loss at it."""
+        m = self.risk.sizing.contract_multiplier
+        return [
+            {
+                "symbol": p.symbol,
+                "qty": p.quantity,
+                "avg_entry": round(p.entry_price, 4),
+                "bid": p.bid,
+                "unrealized_usd": None
+                if p.bid is None
+                else round((p.bid - p.entry_price) * p.quantity * m, 2),
+            }
+            for p in self._open_positions(now)
+        ]
 
     def realized_pnl(self) -> float:
         """Profit and loss on closed contracts, at average cost, from the orders' fills."""

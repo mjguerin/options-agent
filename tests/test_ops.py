@@ -176,7 +176,9 @@ def test_every_job_file_renders_without_placeholders(rendered):
         assert "__" not in f.read_text().replace("__main__", "")
 
 
-@pytest.mark.parametrize("program, cmd", [("alerts", "alerts run"), ("api", "api run")])
+@pytest.mark.parametrize(
+    "program, cmd", [("alerts", "alerts run"), ("api", "api run"), ("dashboard", "dashboard run")]
+)
 def test_the_alert_bot_and_the_api_run_all_day_and_restart_themselves(rendered, program, cmd):
     cp = configparser.RawConfigParser()
     cp.read(rendered["supervisord.conf"])

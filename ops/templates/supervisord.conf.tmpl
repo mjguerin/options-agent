@@ -54,6 +54,23 @@ stdout_logfile_maxbytes=20MB
 stdout_logfile_backups=5
 environment=HOME="__HOME__",PATH="/opt/homebrew/bin:/usr/bin:/bin"
 
+; The dashboard: loopback only, reached through an SSH tunnel. A restart of it never touches
+; the engine.
+[program:dashboard]
+command=__UV__ run --project __REPO__ tournament dashboard run
+directory=__REPO__
+autostart=true
+autorestart=true
+startsecs=10
+startretries=10
+stopsignal=TERM
+stopwaitsecs=15
+redirect_stderr=true
+stdout_logfile=__LOGS__/dashboard.log
+stdout_logfile_maxbytes=20MB
+stdout_logfile_backups=5
+environment=HOME="__HOME__",PATH="/opt/homebrew/bin:/usr/bin:/bin"
+
 ; Started by launchd at the pre-market time, not at boot, so an automatic restart can never load
 ; code that is being edited in the evening. Exit 0 is a normal day or a deliberate skip; exit 3 is
 ; a failed preflight (restarting would not fix it).

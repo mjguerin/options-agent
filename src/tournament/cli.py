@@ -311,6 +311,23 @@ def _api_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _dashboard_run(args: argparse.Namespace) -> int:
+    import subprocess
+
+    from tournament.dashboard.config import load_dashboard_config
+
+    cfg = load_dashboard_config()
+    app = Path(__file__).resolve().parent / "dashboard" / "app.py"
+    cmd = [
+        sys.executable, "-m", "streamlit", "run", str(app),
+        "--server.address", cfg.server.host,
+        "--server.port", str(cfg.server.port),
+        "--server.headless", "true",
+        "--browser.gatherUsageStats", "false",
+    ]  # fmt: skip
+    return subprocess.call(cmd)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tournament")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -389,6 +406,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="don't collect OPRA option quotes",
     )
     run.set_defaults(func=_feed_run)
+
+    dash = sub.add_parser("dashboard", help="the dashboard (loopback only)")
+    dash_sub = dash.add_subparsers(dest="dashboard_command", required=True)
+    dash_sub.add_parser("run", help="serve the dashboard").set_defaults(func=_dashboard_run)
 
     api = sub.add_parser("api", help="the control API (loopback only)")
     api_sub = api.add_subparsers(dest="api_command", required=True)

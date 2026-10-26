@@ -17,6 +17,8 @@ server:
 state:
   file: data/run/engine.state.json   # the engine publishes accounts and feeds here for the API
   every_s: 5
+  history_every_s: 30                # a point per account for the dashboard's curves
+  recent_decisions: 12               # candidate decisions kept in the published state
   max_age_s: 30                      # older than this, the API reports the engine as not reporting
 
 commands:

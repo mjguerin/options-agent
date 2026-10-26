@@ -105,6 +105,23 @@ def create_app(
             ],
         }  # fmt: skip
 
+    @app.get("/v1/incidents")
+    def incidents(limit: int = 50, role: str = Depends(viewer_or_owner)) -> dict:
+        rows = list(reversed(alerts.all_incidents()))[: min(max(limit, 1), 500)] if alerts else []
+        return {
+            "incidents": [
+                {
+                    "kind": i.kind,
+                    "severity": i.severity,
+                    "account": i.account,
+                    "detail": i.detail,
+                    "opened_at": i.opened_at.isoformat(),
+                    "closed_at": i.closed_at.isoformat() if i.closed_at else None,
+                }
+                for i in rows
+            ]
+        }
+
     @app.get("/v1/audit")
     def audit(limit: int = 0, role: str = Depends(viewer_or_owner)) -> dict:
         n = min(limit or cfg.commands.audit_page_size, cfg.commands.audit_page_size)

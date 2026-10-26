@@ -195,6 +195,15 @@ class ReplayRun:
             self._session(out)
         return self._result()
 
+    def latest_evaluations(self) -> dict[str, dict]:
+        """The most recent evaluation record of each worker (for the live dashboard)."""
+        out: dict[str, dict] = {}
+        for r in reversed(self._ev):
+            out.setdefault(r["strategy_id"], r)
+            if len(out) == len(self.workers):
+                break
+        return out
+
     # ---- per session --------------------------------------------------------------------
     def _session(self, out: SessionOutput) -> None:
         run = self.begin_session(out.day, out.session_id)

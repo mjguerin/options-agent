@@ -231,6 +231,7 @@ def run_session(
                 session,
                 mode,
                 collector,
+                engine,
             )
         except Exception:  # noqa: BLE001
             log.exception("controls not started")
