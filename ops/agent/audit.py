@@ -104,3 +104,15 @@ def sweep_transcripts(projects: Path, state_file: Path, audit_file: Path, actor:
     state_file.parent.mkdir(parents=True, exist_ok=True)
     state_file.write_text(json.dumps({"seen": sorted(seen)}))
     return added
+
+
+def offered_tools(lines) -> set[str] | None:
+    """The tools the session offered the model, from the stream's init event (None if absent)."""
+    for line in lines:
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if ev.get("type") == "system" and ev.get("subtype") == "init" and "tools" in ev:
+            return {t if isinstance(t, str) else str(t.get("name")) for t in ev["tools"]}
+    return None
