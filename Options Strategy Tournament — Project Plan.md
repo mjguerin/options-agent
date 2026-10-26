@@ -44,9 +44,9 @@ Goal: all five strategies are written down precisely and replay through the same
 
 **Specifications**
 
-- [x] Write a spec per strategy: thresholds, confirmations, invalidation, exits, re-entry, cooldowns (D05) (draft v0.4 in specs/; approval is part of the gate)
-- [ ] Approve the shared VWAP definition, bar construction and session calendar (MD-05, MD-06)
-- [x] Define the event, feature-snapshot and candidate schemas (BRD 6.1, 11) (specs/schemas.md, draft v0.4)
+- [x] Write a spec per strategy: thresholds, confirmations, invalidation, exits, re-entry, cooldowns (D05) (approved v1 on Oct 25, 2026, tag `specs-v1`)
+- [x] Approve the shared VWAP definition, bar construction and session calendar (MD-05, MD-06) (SD-02 to SD-04 with D-04 frozen, D-46, D-47; Oct 25, 2026)
+- [x] Define the event, feature-snapshot and candidate schemas (BRD 6.1, 11) (specs/schemas.md, `signals-v1`)
 
 **Data and features**
 
@@ -61,7 +61,7 @@ Goal: all five strategies are written down precisely and replay through the same
 - [x] Write no-look-ahead tests on event-time features (feature truncation property test, plus the whole-chain gate check: trades cut at 12 points per session rebuild identical records; 744/744 on Feb–Apr 2024)
 - [x] Prove determinism: two replays of the same day give identical candidates (AC-03) (gate run Oct 25, 2026: 62 sessions, all records identical; traceability 0 failures; report data/reports/step2_gate_2024-02-01_2024-04-30.json)
 
-**Gate:** no look-ahead, every decision traceable to its snapshot, specs approved and tagged.
+**Gate (passed Oct 25, 2026):** no look-ahead, every decision traceable to its snapshot, specs approved and tagged. Specs approved by the owner and tagged `specs-v1` at commit 6cacbcd. The gate run on that commit (Feb–Apr 2024, 62 sessions) had 0 failures: determinism 123,596 records, traceability 147,582, truncation 744 cuts. Data partitions: development 2024, held-out 2025-01-02 to 2026-10-22. The live part of the event normalizer moves to Step 3.
 
 ## Step 3 — Build the trading platform
 

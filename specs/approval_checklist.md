@@ -40,7 +40,7 @@ The owner approved all of these on 2026-10-25, and they're marked AGREED in [dec
 - **VWAP:** last-eligible session VWAP, E-4(a).
 - **Session calendar:** SD-02, with Alpaca's calendar as the selected provider calendar.
 
-## 4. On approval, the drafter will
+## 4. On approval (done 2026-10-25: commit 6cacbcd, tag `specs-v1`, gate passed)
 
 1. Change every spec status line from `DRAFT v0.4` to `APPROVED v1`. Change config versions from
    `*-draft` to `*-v1` (features, common, five strategies, eligibility adapter), which changes their
