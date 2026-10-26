@@ -1,0 +1,47 @@
+# Order handling for every strategy account (BRD OM-01 to OM-08, EX-03 to EX-06; D08). DRAFT:
+# initial values proposed by the drafter on 2026-10-26, for the owner to adjust.
+#
+# Every number is data. Changing one is a new orders version and a new evaluation segment
+# (FR-09): copy this file to orders-v2.yaml and select it with TOURNAMENT_ORDERS_CONFIG.
+# No defaults in code: a missing value stops startup.
+
+version: orders-v1-draft
+
+client_order_id:
+  prefix: opt                        # <prefix>-<account>-<candidate hash>-<purpose><n>
+
+pricing:
+  tick_size: 0.01                    # SPY options trade in pennies
+
+entry:
+  order_type: limit
+  price_basis: ask                   # ask | mid
+  price_offset_ticks: 0              # added to the basis, in ticks (0 = at the ask)
+  time_in_force: day
+  fill_timeout_s: 5                  # an entry still unfilled after this is cancelled
+  max_replacements: 0                # re-priced orders after a timeout; 0 = drop the signal
+  replacement_step_ticks: 1          # each replacement raises the limit this many ticks
+  max_slippage_ticks: 3              # a replacement never goes beyond this from the first limit
+  partial_fill_policy: keep_filled   # keep_filled: cancel the rest, manage what filled
+
+exit:
+  order_type: limit
+  price_basis: bid                   # bid | mid
+  price_offset_ticks: 0              # added to the basis (negative = below the bid)
+  time_in_force: day
+  fill_timeout_s: 3
+  max_replacements: 3                # each replacement lowers the limit
+  replacement_step_ticks: 1
+  final_fallback: market             # market | none: after the last replacement times out
+
+submission:
+  ack_timeout_s: 3                   # no reply to a submission: reconcile, never resubmit blindly
+  reconcile_attempts: 3              # broker lookups by client order ID before deciding
+  reconcile_interval_s: 0.5
+  resubmit_after_not_found: true     # same client order ID, so a late original can't double up
+  cancel_confirm_attempts: 3         # lookups to confirm a cancel (a fill can race it)
+  cancel_confirm_interval_s: 0.5
+
+reconciliation:
+  quantity_tolerance: 0              # contracts of difference tolerated between us and the broker
+  block_entries_on_mismatch: true    # OM-06: unexpected exposure blocks new entries

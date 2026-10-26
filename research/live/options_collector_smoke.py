@@ -7,21 +7,22 @@ from pathlib import Path
 
 import pandas as pd
 
-from tournament.adapters.alpaca import DATA_ACCOUNT_ALIAS
+from tournament.adapters.alpaca import data_account_alias
 from tournament.adapters.alpaca_history import AlpacaHistory
 from tournament.live.options_runner import OptionsCollector
 from tournament.live.runner import latest_spy_price, load_feed_config
 from tournament.marketdata.calendar import SessionDay
 from tournament.secrets import load_alpaca_credentials
 
-creds = load_alpaca_credentials(DATA_ACCOUNT_ALIAS)
+creds = load_alpaca_credentials(data_account_alias())
 cfg = load_feed_config()["options"]
 now = datetime.now(UTC)
 day = SessionDay(
     date.today(), now.replace(hour=13, minute=30, second=0, microsecond=0), now + timedelta(hours=5)
 )
-spot = latest_spy_price(creds)
-c = OptionsCollector(cfg, creds, day, "shadow", spot, AlpacaHistory(creds))
+fc = load_feed_config()
+spot = latest_spy_price(creds, fc["spot_feed"], "SPY")
+c = OptionsCollector(cfg, fc, creds, day, "shadow", spot, AlpacaHistory(creds))
 first = set(c.stream.desired)
 
 

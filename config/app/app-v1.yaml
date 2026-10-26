@@ -1,0 +1,49 @@
+# Application settings that are not strategy, feature or risk parameters. DRAFT.
+#
+# Rule: any value that could reasonably be changed lives in a YAML file, never in code. What
+# stays in code are safety invariants (paper-only broker endpoint; shadow and paper modes accept
+# only real-time feeds) and the structure of the data (dataset names, schemas).
+#
+# The file is selected by TOURNAMENT_APP_CONFIG (a path), else this one. There are no defaults
+# in code: a missing value stops the program at startup.
+
+version: app-v1-draft
+
+underlying: SPY                      # every strategy trades this symbol and its options (MD-10)
+
+exchange:
+  timezone: America/New_York
+  regular_close: "16:00"             # a session closing earlier is an early close
+  extended_start: "04:00"            # pre-market start, exchange local time
+  after_hours_hours: 4               # extended session ends this many hours after the close
+
+accounts:
+  data_alias: data                   # .env alias holding the SIP + OPRA entitlement (login 2)
+  dev_alias: dev                     # development paper account
+
+endpoints:
+  stock_stream:                      # websocket URLs by feed kind
+    sip: wss://stream.data.alpaca.markets/v2/sip
+    test: wss://stream.data.alpaca.markets/v2/test
+  option_stream_base: wss://stream.data.alpaca.markets/v1beta1   # + /opra or /indicative
+
+database:
+  url: postgresql+psycopg:///options_tournament   # local Unix socket; no password to store
+
+history:
+  start_date: 2024-02-01             # Alpaca options history begins here (MD-11)
+  universe:                          # option contracts kept per day when downloading
+    max_dte: 7                       # calendar days after the session date
+    strike_pct: 0.05                 # around the session's first regular-hours open
+  trade_slice_minutes: 30            # trade download window per request
+  parallel_requests: 8
+  option_symbols_per_request: 100
+  contracts_page_limit: 10000
+  download_guard:                    # heavy downloads stay out of trading hours (NFR-05)
+    start: "09:00"
+    end: "16:30"
+    timezone_weekdays_only: true
+
+performance:
+  classify_cache_size: 4096          # distinct sale-condition combinations cached
+  rvol_history_depth_factor: 4       # past sessions kept per reference session, for gaps

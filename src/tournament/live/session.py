@@ -14,10 +14,9 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 
+from tournament.appconfig import app_config
 from tournament.live.bars import LiveBarBuilder
 from tournament.live.events import (
-    HALT_CODES,
-    RESUME_CODES,
     cancel_from,
     correction_from,
     status_from,
@@ -35,15 +34,19 @@ class LiveSession:
         day: SessionDay,
         cfg: EligibilityConfig,
         *,
-        symbol: str = "SPY",
+        symbol: str | None = None,
         rules_symbol: str | None = None,
         usage: Usage = Usage.LIVE,
-        finalize_delay: timedelta = timedelta(seconds=2),
-        stale_after: timedelta = timedelta(seconds=5),
+        finalize_delay: timedelta,
+        stale_after: timedelta,
+        halt_codes: frozenset[str],
+        resume_codes: frozenset[str],
         on_bar: Callable[[dict], None] | None = None,
     ) -> None:
+        symbol = symbol or app_config().underlying
         self.day, self.cfg, self.symbol, self.usage = day, cfg, symbol, usage
         self.delay = pd.Timedelta(finalize_delay)
+        self.halt_codes, self.resume_codes = halt_codes, resume_codes
         # rules_symbol: whose listing market the SIP state uses (the test stream's synthetic
         # symbol borrows SPY's)
         self.rules_symbol = rules_symbol or symbol
@@ -90,7 +93,7 @@ class LiveSession:
                 self.builder.correct(cancel_from(msg))
             elif kind == "s":
                 st = status_from(msg)
-                self.health.on_status(st.code, st.ts, HALT_CODES, RESUME_CODES)
+                self.health.on_status(st.code, st.ts, self.halt_codes, self.resume_codes)
 
     def tick(self, now: pd.Timestamp) -> None:
         self.health.check_stale(now, pd.Timestamp(self.day.open_utc))

@@ -83,10 +83,10 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 
 **Orders and exits**
 
-- [ ] Order manager: persist intent and client order ID before submission (OM-02)
-- [ ] Timeout handling that reconciles before retrying (OM-03)
-- [ ] Position manager with exit precedence and no duplicate liquidations (EX-03, EX-05)
-- [ ] Reconciliation at startup, after disconnects and periodically (OM-05)
+- [x] Order manager: persist intent and client order ID before submission (OM-02) (src/tournament/orders: manager, store with migration 0001, broker boundary; D-60 to D-62 drafts)
+- [x] Timeout handling that reconciles before retrying (OM-03) (lookup by client order ID, resubmit only on confirmed absence, same ID)
+- [ ] Position manager with exit precedence and no duplicate liquidations (EX-03, EX-05) (order side done: one exit chain per position, second trigger adds its reason; the loop that evaluates the premium stop and calls it comes with the account runtime)
+- [ ] Reconciliation at startup, after disconnects and periodically (OM-05) (recover() and position reconciliation with entry blocking built and tested; periodic scheduling and balance checks come with the runtime)
 
 **Startup and operations**
 
@@ -112,7 +112,7 @@ Goal: prove isolation, risk, execution and accounting on real paper fills with t
 
 - [x] Set the per-trade risk budget and daily loss limit (D07); review which SPY deltas that budget allows (initial values Oct 26, 2026: 20% premium budget, 20% premium stop, $500 daily limit, in config/risk/risk-v1.yaml; the budget allows ATM 0DTE, about 13 contracts at 1.44. Changing them is a new version)
 - [x] Set the expiration and delta policy from that budget (D06) (initial rule: 0DTE, nearest-ATM strike, one contract tried, quantity from the budget; D-57. Revisit after the first shadow weeks)
-- [ ] Approve order types, timeouts and replacement limits (D08)
+- [ ] Approve order types, timeouts and replacement limits (D08) (initial values drafted Oct 26, 2026 in config/orders/orders-v1.yaml, awaiting the owner's approval)
 - [ ] Create two $10,000 paper accounts for two of the five candidates (FR-13)
 - [ ] Run one to two weeks in shadow, then switch to paper
 - [ ] Measure latency budgets for feed, candidate, submission and exit (NFR-02)

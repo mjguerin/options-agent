@@ -5,8 +5,8 @@ import pytest
 from alpaca.common.exceptions import APIError
 
 from tournament.adapters.alpaca import (
-    DATA_ACCOUNT_ALIAS,
     check_data_entitlements,
+    data_account_alias,
     data_clients,
 )
 from tournament.secrets import load_alpaca_credentials
@@ -73,6 +73,6 @@ def test_no_contracts_is_a_failure():
 )
 def test_data_account_has_sip_and_opra():
     """D03 / MD-09: the data keys reach real-time SIP and OPRA quotes."""
-    creds = load_alpaca_credentials(DATA_ACCOUNT_ALIAS)
+    creds = load_alpaca_credentials(data_account_alias())
     checks = check_data_entitlements(*data_clients(creds))
     assert all(c.ok for c in checks), checks

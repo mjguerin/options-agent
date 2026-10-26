@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 
+from tournament.appconfig import app_config
 from tournament.features.engine import (
     FeatureConfig,
     PriorContext,
@@ -59,7 +60,8 @@ class RvolHistory:
         out = np.full(self.full_slots, np.nan)
         if not self.rows:
             return out
-        m = np.vstack(self.rows[-4 * self.sessions :])  # ample depth for occasional gaps
+        depth = app_config().performance.rvol_history_depth_factor
+        m = np.vstack(self.rows[-depth * self.sessions :])  # depth: room for occasional gaps
         for s in range(self.full_slots):
             col = m[:, s]
             col = col[~np.isnan(col)][-self.sessions :]

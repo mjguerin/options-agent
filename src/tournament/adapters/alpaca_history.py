@@ -25,6 +25,7 @@ from alpaca.trading.enums import AssetStatus
 from alpaca.trading.requests import GetCalendarRequest, GetOptionContractsRequest
 
 from tournament.adapters.alpaca import paper_trading_client
+from tournament.appconfig import app_config
 from tournament.marketdata.calendar import SessionDay, session_from_exchange_times
 from tournament.marketdata.schemas import (
     BAR_SCHEMA,
@@ -34,8 +35,6 @@ from tournament.marketdata.schemas import (
     TRADE_SCHEMA,
 )
 from tournament.secrets import AlpacaCredentials
-
-OPTION_SYMBOLS_PER_REQUEST = 100
 
 
 def _ts(values: list[str]) -> pd.Series:
@@ -105,10 +104,6 @@ def concat_trade_slices(tables: list[pa.Table]) -> pa.Table:
     return pa.Table.from_pandas(df, schema=TRADE_SCHEMA, preserve_index=False)
 
 
-TRADE_SLICE_MINUTES = 30
-PARALLEL_REQUESTS = 8
-
-
 class AlpacaHistory:
     """Reads history with the `data` keys (the login that holds SIP + OPRA)."""
 
@@ -149,8 +144,9 @@ class AlpacaHistory:
             )
             return trades_table(raw.get(symbol, []))
 
-        windows = time_slices(start, end, TRADE_SLICE_MINUTES)
-        with ThreadPoolExecutor(max_workers=PARALLEL_REQUESTS) as pool:
+        h = app_config().history
+        windows = time_slices(start, end, h.trade_slice_minutes)
+        with ThreadPoolExecutor(max_workers=h.parallel_requests) as pool:
             return concat_trade_slices(list(pool.map(fetch, windows)))
 
     def option_contracts(
@@ -169,7 +165,7 @@ class AlpacaHistory:
                         expiration_date_lte=exp_to,
                         strike_price_gte=f"{strike_low:.2f}",
                         strike_price_lte=f"{strike_high:.2f}",
-                        limit=10000,
+                        limit=app_config().history.contracts_page_limit,
                         page_token=token,
                     )
                 )
@@ -193,8 +189,8 @@ class AlpacaHistory:
 
     def option_bars(self, symbols: list[str], start: datetime, end: datetime) -> pa.Table:
         tables = []
-        for i in range(0, len(symbols), OPTION_SYMBOLS_PER_REQUEST):
-            batch = symbols[i : i + OPTION_SYMBOLS_PER_REQUEST]
+        for i in range(0, len(symbols), app_config().history.option_symbols_per_request):
+            batch = symbols[i : i + app_config().history.option_symbols_per_request]
             raw = self.option.get_option_bars(
                 OptionBarsRequest(
                     symbol_or_symbols=batch, timeframe=TimeFrame.Minute, start=start, end=end
@@ -207,8 +203,8 @@ class AlpacaHistory:
 
     def option_trades(self, symbols: list[str], start: datetime, end: datetime) -> pa.Table:
         raw: dict[str, list[dict]] = {}
-        for i in range(0, len(symbols), OPTION_SYMBOLS_PER_REQUEST):
-            batch = symbols[i : i + OPTION_SYMBOLS_PER_REQUEST]
+        for i in range(0, len(symbols), app_config().history.option_symbols_per_request):
+            batch = symbols[i : i + app_config().history.option_symbols_per_request]
             raw.update(
                 self.option.get_option_trades(
                     OptionTradesRequest(symbol_or_symbols=batch, start=start, end=end)

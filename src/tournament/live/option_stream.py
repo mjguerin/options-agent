@@ -16,11 +16,11 @@ import logging
 
 import msgpack
 
+from tournament.appconfig import app_config
 from tournament.live.stream import MODES, FeedGuardError, MarketDataStream
 
 log = logging.getLogger(__name__)
 
-BASE_URL = "wss://stream.data.alpaca.markets/v1beta1"
 FEEDS = ("opra", "indicative")
 SYMBOL_LIMIT_CODE = 405  # "symbol limit exceeded"
 WILDCARD_CODE = 413
@@ -29,7 +29,7 @@ WILDCARD_CODE = 413
 def option_url(feed: str) -> str:
     if feed not in FEEDS:
         raise FeedGuardError(f"unknown option feed {feed!r}")
-    return f"{BASE_URL}/{feed}"
+    return f"{app_config().endpoints.option_stream_base}/{feed}"
 
 
 def check_option_feed(feed: str, mode: str) -> None:

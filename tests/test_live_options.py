@@ -50,7 +50,7 @@ def q(ts, bid=1.00, ask=1.05, symbol=SYM, bs=10, as_=12):
 
 
 def feed():
-    f = OptionFeed(pd.Timedelta(seconds=5), pd.Timedelta(seconds=2), pd.Timedelta(seconds=10))
+    f = OptionFeed(pd.Timedelta(seconds=5), pd.Timedelta(seconds=2), pd.Timedelta(seconds=10), 5000)
     f.on_connected(sec(-60))
     return f
 
@@ -77,7 +77,16 @@ def test_the_stream_refuses_to_be_built_on_the_wrong_feed():
 
 def _callbacks():
     n = lambda *a: None  # noqa: E731
-    return dict(on_messages=n, on_connected=n, on_disconnected=n, on_tick=n)
+    return dict(
+        on_messages=n,
+        on_connected=n,
+        on_disconnected=n,
+        on_tick=n,
+        tick_s=0.25,
+        backoff_s=(1,),
+        ping_interval_s=10,
+        handshake_timeout_s=10,
+    )
 
 
 # ---- wire format and subscription sync ----------------------------------------------------

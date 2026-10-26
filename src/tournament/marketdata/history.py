@@ -11,18 +11,18 @@ from __future__ import annotations
 import subprocess
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from tournament.marketdata.calendar import EXCHANGE_TZ, SessionDay
+from tournament.appconfig import app_config
+from tournament.marketdata.calendar import SessionDay
 from tournament.marketdata.schemas import CALENDAR_SCHEMA, OPTION_BAR_SCHEMA
 from tournament.marketdata.store import HistoryStore
 
-UNDERLYING = "SPY"
 DATASETS = (
     "spy_bars_1m",
     "spy_trades",
@@ -30,7 +30,15 @@ DATASETS = (
     "option_contracts",
     "option_bars_1m",
 )
-HISTORY_START = date(2024, 2, 1)  # Alpaca options history begins here (MD-11)
+
+
+def underlying() -> str:
+    return app_config().underlying
+
+
+def history_start() -> date:
+    """Alpaca options history begins here (MD-11); set in config/app."""
+    return app_config().history.start_date
 
 
 class HistorySource(Protocol):
@@ -75,8 +83,13 @@ def bars_from_trades(trades: pa.Table) -> pa.Table:
 class UniverseRule:
     """Which option contracts to keep per day. Wide on purpose; D06 narrows it later."""
 
-    max_dte: int = 7  # calendar days after the session date
-    strike_pct: float = 0.05  # around the session's first regular-hours open
+    max_dte: int  # calendar days after the session date
+    strike_pct: float  # around the session's first regular-hours open
+
+    @classmethod
+    def from_config(cls) -> UniverseRule:
+        u = app_config().history.universe
+        return cls(u.max_dte, u.strike_pct)
 
     def bounds(self, session_date: date, reference_price: float) -> tuple[date, date, float, float]:
         return (
@@ -92,12 +105,15 @@ class SessionGuardError(RuntimeError):
 
 
 def check_outside_session(now: datetime | None = None) -> None:
-    """Heavy downloads stay out of trading hours (NFR-05): 09:00-16:30 ET on weekdays."""
-    now = (now or datetime.now(UTC)).astimezone(EXCHANGE_TZ)
-    if now.weekday() < 5 and time(9, 0) <= now.time() <= time(16, 30):
+    """Heavy downloads stay out of trading hours (NFR-05); the window is in config/app."""
+    cfg = app_config()
+    g = cfg.history.download_guard
+    now = (now or datetime.now(UTC)).astimezone(cfg.exchange.tz)
+    weekday = now.weekday() < 5 or not g.timezone_weekdays_only
+    if weekday and g.start_time <= now.time() <= g.end_time:
         raise SessionGuardError(
-            "Refusing to download during the trading session (09:00-16:30 ET). "
-            "Run after the close, or pass --allow-during-session."
+            f"Refusing to download during the trading session ({g.start}-{g.end} "
+            f"{cfg.exchange.timezone}). Run after the close, or pass --allow-during-session."
         )
 
 
@@ -148,7 +164,7 @@ class Downloader:
     ) -> None:
         self.source = source
         self.store = store
-        self.universe = universe or UniverseRule()
+        self.universe = universe or UniverseRule.from_config()
         self.commit = commit
         self.log = log
 
@@ -168,7 +184,7 @@ class Downloader:
     def _spy_bars(self, day: SessionDay, refresh: bool) -> pa.Table:
         if not refresh and self.store.has("spy_bars_1m", day.session_date):
             return self.store.read("spy_bars_1m", day.session_date)
-        bars = self.source.stock_bars(UNDERLYING, day.extended_start_utc, day.extended_end_utc)
+        bars = self.source.stock_bars(underlying(), day.extended_start_utc, day.extended_end_utc)
         return _with_regular_flag(bars, day)
 
     def _universe(self, day: SessionDay, bars: pa.Table) -> tuple[pa.Table, float]:
@@ -177,7 +193,7 @@ class Downloader:
             raise RuntimeError(f"{day.session_date}: no regular-session SPY bars to anchor strikes")
         reference = regular.column("open")[0].as_py()
         exp_from, exp_to, low, high = self.universe.bounds(day.session_date, reference)
-        return self.source.option_contracts(UNDERLYING, exp_from, exp_to, low, high), reference
+        return self.source.option_contracts(underlying(), exp_from, exp_to, low, high), reference
 
     def download_day(
         self, day: SessionDay, datasets: Iterable[str] = DATASETS, force: bool = False
@@ -198,23 +214,23 @@ class Downloader:
         if "spy_bars_1m" in wanted or need_universe:
             bars = self._spy_bars(day, refresh="spy_bars_1m" in wanted)
             if "spy_bars_1m" in wanted:
-                save("spy_bars_1m", bars, feed="sip", symbol=UNDERLYING)
+                save("spy_bars_1m", bars, feed="sip", symbol=underlying())
 
         if "spy_trades" in wanted:
             save(
                 "spy_trades",
-                self.source.stock_trades(UNDERLYING, day.open_utc, day.close_utc),
+                self.source.stock_trades(underlying(), day.open_utc, day.close_utc),
                 feed="sip",
-                symbol=UNDERLYING,
+                symbol=underlying(),
             )
 
         if "spy_trades_premarket" in wanted:
             # Raw and unfiltered: eligibility is applied later by the adapter, so it can be rerun.
             save(
                 "spy_trades_premarket",
-                self.source.stock_trades(UNDERLYING, day.extended_start_utc, day.open_utc),
+                self.source.stock_trades(underlying(), day.extended_start_utc, day.open_utc),
                 feed="sip",
-                symbol=UNDERLYING,
+                symbol=underlying(),
                 window="04:00 ET to open",
             )
 

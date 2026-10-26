@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 
+from tournament.appconfig import app_config
 from tournament.marketdata.calendar import SessionDay
 from tournament.marketdata.eligibility import EligibilityConfig, LastState, Usage
 
@@ -113,10 +114,11 @@ def build_session_bars(
     day: SessionDay,
     cfg: EligibilityConfig,
     usage: Usage,
-    symbol: str = "SPY",
+    symbol: str | None = None,
     gap_slots: frozenset[int] = frozenset(),
 ) -> pa.Table:
     """Regular-session bars for every scheduled slot of `day`."""
+    symbol = symbol or app_config().underlying
     t = trades.to_pandas() if isinstance(trades, pa.Table) else trades.copy()
     t = t.sort_values("ts", kind="stable").reset_index(drop=True)
     n_slots = int((day.close_utc - day.open_utc) / timedelta(minutes=1))
@@ -161,11 +163,12 @@ def premarket_levels(
     day: SessionDay,
     cfg: EligibilityConfig,
     usage: Usage,
-    symbol: str = "SPY",
+    symbol: str | None = None,
 ) -> PremarketLevels:
     """PMH/PML under E-6: T is the session marker; every other condition must pass the
     last rule, against a SEPARATE application_premarket_price_state (never SIP state).
     Any quarantined trade makes the levels uncertain (null), per D-36."""
+    symbol = symbol or app_config().underlying
     t = trades.to_pandas() if isinstance(trades, pa.Table) else trades.copy()
     t = t.sort_values("ts", kind="stable").reset_index(drop=True)
     if t.empty:

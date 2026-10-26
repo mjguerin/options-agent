@@ -6,11 +6,9 @@ peer authentication, so there is no database secret to store.
 
 from __future__ import annotations
 
-import os
-
 from sqlalchemy import MetaData
 
-DEFAULT_DATABASE_URL = "postgresql+psycopg:///options_tournament"
+from tournament.appconfig import app_config
 
 # Stable constraint names so Alembic autogenerate produces reviewable migrations.
 metadata = MetaData(
@@ -25,4 +23,4 @@ metadata = MetaData(
 
 
 def database_url() -> str:
-    return os.environ.get("TOURNAMENT_DATABASE_URL", DEFAULT_DATABASE_URL)
+    return app_config().database.url

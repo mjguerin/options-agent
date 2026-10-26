@@ -16,6 +16,8 @@ from pathlib import Path
 
 import yaml
 
+from tournament.appconfig import app_config
+
 CONFIG_DIR = Path(__file__).resolve().parents[3] / "config" / "trade_eligibility"
 SPACE = "SPACE"
 NOTES = ("NOTE_2", "NOTE_3")
@@ -74,7 +76,9 @@ class EligibilityConfig:
             (a["code"], a["window"]["from"], a["window"]["to_exclusive"]): a
             for a in adapter["assumptions"]
         }
-        self._classify = lru_cache(maxsize=4096)(self._classify_uncached)
+        self._classify = lru_cache(maxsize=app_config().performance.classify_cache_size)(
+            self._classify_uncached
+        )
 
     def row(self, code: str, day: date) -> Row | None:
         for r in self.rows.get(code, ()):

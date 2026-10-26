@@ -2,14 +2,18 @@
 # thresholds below are Step 3 decisions D-48 to D-54 awaiting owner approval.
 
 version: feed-v1-draft
-sip_url: wss://stream.data.alpaca.markets/v2/sip
-test_url: wss://stream.data.alpaca.markets/v2/test
-symbol: SPY
-test_symbol: FAKEPACA
+test_symbol: FAKEPACA        # Alpaca's synthetic symbol on the test feed
+halt_status_codes: [H, P]    # D-49: trading status codes that open a halt (H halt, P LULD pause)
+resume_status_codes: [T]    # D-49: the code that ends it (trading resumption)
 stale_after_s: 5            # D-48: no message for this long while connected = feed uncertain
 test_stale_after_s: 15      # the test stream sends one trade every 5 s
 tick_s: 0.25                # how often due slots and staleness are checked without input
 reconnect_backoff_s: [1, 2, 4, 8, 15, 30]
+ping_interval_s: 10         # websocket keep-alive
+handshake_timeout_s: 10     # connect, authenticate and subscribe replies
+shutdown_grace_s: 1         # keep running this long after close + finalize delay
+synthetic_session_lead_min: 1  # the test feed's session starts this many minutes ahead
+spot_feed: sip              # feed for the latest SPY price at startup
 
 # Option quotes (OPRA). D-52 to D-54, DRAFT.
 options:
@@ -20,3 +24,5 @@ options:
   feed_silent_after_s: 10    # D-52: no option message for this long while subscribed = down
   watch_strikes_each_side: 10  # D-54: pre-D06 watch set: 0DTE, 10 strikes each side of spot
   watch_expiry_days: [0]
+  contract_fetch_range_pct: 0.10  # contracts within this fraction of spot are loaded
+  quote_lag_window: 5000     # recent quotes kept for the delivery-lag percentiles

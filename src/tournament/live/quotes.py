@@ -82,9 +82,13 @@ def quote_from(msg: dict, received: pd.Timestamp) -> OptionQuote:
 class QuoteBook:
     max_age: pd.Timedelta
     max_delivery_lag: pd.Timedelta
+    lag_window: int
     quotes: dict[str, OptionQuote] = field(default_factory=dict)
     counts: dict[str, int] = field(default_factory=lambda: {"quotes": 0, "out_of_order": 0})
-    _lags: deque = field(default_factory=lambda: deque(maxlen=5000))
+    _lags: deque = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._lags = deque(maxlen=self.lag_window)
 
     def on_quote(self, q: OptionQuote) -> None:
         self.counts["quotes"] += 1
@@ -96,7 +100,7 @@ class QuoteBook:
         self.quotes[q.symbol] = q
 
     def lag_percentiles(self) -> dict[str, float] | None:
-        """Delivery lag (receive minus exchange time) over the last 5000 quotes (NFR-10)."""
+        """Delivery lag (receive minus exchange time) over the last `lag_window` quotes (NFR-10)."""
         if not self._lags:
             return None
         a = np.array(self._lags)
@@ -129,9 +133,13 @@ class OptionFeed:
     thousands of quotes a second, too much to store): the last quote per contract per second."""
 
     def __init__(
-        self, max_age: pd.Timedelta, max_delivery_lag: pd.Timedelta, silent_after: pd.Timedelta
+        self,
+        max_age: pd.Timedelta,
+        max_delivery_lag: pd.Timedelta,
+        silent_after: pd.Timedelta,
+        lag_window: int,
     ) -> None:
-        self.book = QuoteBook(max_age, max_delivery_lag)
+        self.book = QuoteBook(max_age, max_delivery_lag, lag_window)
         self.health = FeedHealth(silent_after)
         self.snapshots: list[dict] = []
         self._dirty: set[str] = set()

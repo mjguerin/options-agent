@@ -12,14 +12,20 @@ from alpaca.data.requests import OptionLatestQuoteRequest, StockLatestQuoteReque
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import GetOptionContractsRequest
 
+from tournament.appconfig import app_config
 from tournament.secrets import AlpacaCredentials
 
 PAPER_TRADING_URL = "https://paper-api.alpaca.markets"
 
-# Market data entitlements belong to the Alpaca login, not to each paper account.
-# Algo Trader Plus (SIP + OPRA, MD-09) is on the second login, so market data is
-# read with keys from a paper account under that login, stored as this alias.
-DATA_ACCOUNT_ALIAS = "data"
+# Safety invariant, deliberately not configurable (NFR-06, AC-15): only this broker host is
+# ever accepted. Everything else about the broker lives in config/app.
+
+
+def data_account_alias() -> str:
+    """Market data entitlements belong to the Alpaca login, not to each paper account. Algo
+    Trader Plus (SIP + OPRA, MD-09) is on the second login, so market data is read with keys
+    from a paper account under that login, stored as this alias (config/app accounts)."""
+    return app_config().accounts.data_alias
 
 
 class LiveEndpointRejectedError(RuntimeError):

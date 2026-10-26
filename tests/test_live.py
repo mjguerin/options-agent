@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from tournament.live.session import LiveSession
-from tournament.live.stream import SIP_URL, TEST_URL, FeedGuardError, check_feed
+from tournament.live.stream import FeedGuardError, check_feed, stock_url
 from tournament.marketdata.bars import BAR_SCHEMA, build_session_bars
 from tournament.marketdata.calendar import SessionDay
 from tournament.marketdata.eligibility import EligibilityConfig, Usage
@@ -42,7 +42,14 @@ def msg(ts, price, size=100, c=(" ",), x="P", i=None):
 def session(connect=PRE, stale=timedelta(hours=1)):
     """Synthetic sessions go quiet for minutes; real SPY never does in regular hours, so the
     stale rule is switched off except where a test is about it."""
-    s = LiveSession(DAY, CFG, stale_after=stale)
+    s = LiveSession(
+        DAY,
+        CFG,
+        finalize_delay=timedelta(seconds=2),
+        halt_codes=frozenset({"H", "P"}),
+        resume_codes=frozenset({"T"}),
+        stale_after=stale,
+    )
     s.on_connected(connect)
     return s
 
@@ -288,11 +295,12 @@ def test_idle_ticks_finalize_every_slot_through_the_close():
 
 
 def test_feed_guard():
-    check_feed(SIP_URL, "shadow")
-    check_feed(SIP_URL, "paper")
-    check_feed(TEST_URL, "test")
-    for url, mode in ((TEST_URL, "shadow"), (TEST_URL, "paper"), (SIP_URL, "test")):
+    check_feed("sip", "shadow")
+    check_feed("sip", "paper")
+    check_feed("test", "test")
+    for feed, mode in (("test", "shadow"), ("test", "paper"), ("sip", "test")):
         with pytest.raises(FeedGuardError):
-            check_feed(url, mode)
+            check_feed(feed, mode)
     with pytest.raises(FeedGuardError):
-        check_feed("wss://stream.data.alpaca.markets/v2/iex", "paper")
+        check_feed("iex", "paper")
+    assert stock_url("sip").endswith("/v2/sip") and stock_url("test").endswith("/v2/test")

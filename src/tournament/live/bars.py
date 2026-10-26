@@ -23,6 +23,7 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 
+from tournament.appconfig import app_config
 from tournament.live.events import Correction, TradeIn
 from tournament.marketdata.bars import (
     DATA_MISSING_OR_UNCERTAIN,
@@ -40,8 +41,9 @@ TRADE_COLS = ["ts", "price", "size", "exchange", "conditions", "trade_id", "tape
 
 class LiveBarBuilder:
     def __init__(
-        self, day: SessionDay, cfg: EligibilityConfig, usage: Usage, symbol: str = "SPY"
+        self, day: SessionDay, cfg: EligibilityConfig, usage: Usage, symbol: str | None = None
     ) -> None:
+        symbol = symbol or app_config().underlying
         self.day, self.cfg, self.usage = day, cfg, usage
         self.n_slots = int((day.close_utc - day.open_utc) / timedelta(minutes=1))
         self.open_ns = pd.Timestamp(day.open_utc).value

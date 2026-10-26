@@ -10,7 +10,7 @@ import pandas as pd
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockLatestTradeRequest
 
-from tournament.adapters.alpaca import DATA_ACCOUNT_ALIAS
+from tournament.adapters.alpaca import data_account_alias
 from tournament.adapters.alpaca_history import AlpacaHistory
 from tournament.live.option_stream import AlpacaOptionStream
 from tournament.live.quotes import OptionFeed
@@ -18,7 +18,7 @@ from tournament.live.runner import load_feed_config
 from tournament.live.subscriptions import OptionUniverse, parse_occ
 from tournament.secrets import load_alpaca_credentials
 
-creds = load_alpaca_credentials(DATA_ACCOUNT_ALIAS)
+creds = load_alpaca_credentials(data_account_alias())
 cfg = load_feed_config()["options"]
 spot = (
     StockHistoricalDataClient(creds.key_id, creds.secret_key)
@@ -46,6 +46,10 @@ st = AlpacaOptionStream(
     creds.secret_key,
     mode="shadow",
     max_symbols=1000,
+    tick_s=fc["tick_s"],
+    backoff_s=tuple(fc["reconnect_backoff_s"]),
+    ping_interval_s=fc["ping_interval_s"],
+    handshake_timeout_s=fc["handshake_timeout_s"],
     on_messages=feed.on_messages,
     on_connected=feed.on_connected,
     on_disconnected=feed.on_disconnected,

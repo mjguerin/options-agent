@@ -8,6 +8,7 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
+from tournament.appconfig import app_config
 from tournament.secrets import (
     InsecureEnvFileError,
     MissingCredentialsError,
@@ -66,7 +67,7 @@ def _history_root() -> Path:
 
 
 def _history_download(args: argparse.Namespace) -> int:
-    from tournament.adapters.alpaca import DATA_ACCOUNT_ALIAS
+    from tournament.adapters.alpaca import data_account_alias
     from tournament.adapters.alpaca_history import AlpacaHistory
     from tournament.marketdata.history import (
         Downloader,
@@ -80,7 +81,7 @@ def _history_download(args: argparse.Namespace) -> int:
     try:
         if not args.allow_during_session:
             check_outside_session()
-        creds = load_alpaca_credentials(DATA_ACCOUNT_ALIAS)
+        creds = load_alpaca_credentials(data_account_alias())
     except (SessionGuardError, MissingCredentialsError, InsecureEnvFileError) as exc:
         print(exc, file=sys.stderr)
         return 1
@@ -123,19 +124,25 @@ def _feed_run(args: argparse.Namespace) -> int:
     import logging
     from datetime import UTC, datetime
 
-    from tournament.adapters.alpaca import DATA_ACCOUNT_ALIAS
+    from tournament.adapters.alpaca import data_account_alias
     from tournament.adapters.alpaca_history import AlpacaHistory
-    from tournament.live.runner import run_session, synthetic_session, today_session
+    from tournament.live.runner import (
+        load_feed_config,
+        run_session,
+        synthetic_session,
+        today_session,
+    )
     from tournament.live.stream import FatalStreamError, FeedGuardError
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
-        creds = load_alpaca_credentials(DATA_ACCOUNT_ALIAS)
+        creds = load_alpaca_credentials(data_account_alias())
     except (MissingCredentialsError, InsecureEnvFileError) as exc:
         print(exc, file=sys.stderr)
         return 1
     if args.test_minutes:
-        mode, day = "test", synthetic_session(args.test_minutes, datetime.now(UTC))
+        lead = load_feed_config()["synthetic_session_lead_min"]
+        mode, day = "test", synthetic_session(args.test_minutes, datetime.now(UTC), lead)
     else:
         mode = "shadow"
         day = today_session(AlpacaHistory(creds).calendar, date.today())
@@ -162,23 +169,27 @@ def build_parser() -> argparse.ArgumentParser:
     keys = sub.add_parser("keys", help="check Alpaca credentials in .env")
     keys_sub = keys.add_subparsers(dest="keys_command", required=True)
     check = keys_sub.add_parser("check")
-    check.add_argument("--account", default="dev", help="account alias (default: dev)")
+    dev = app_config().accounts.dev_alias
+    check.add_argument("--account", default=dev, help=f"account alias (default: {dev})")
     check.set_defaults(func=_keys_check)
 
     hello = sub.add_parser("hello", help="read the paper account through the Alpaca API")
-    hello.add_argument("--account", default="dev", help="account alias (default: dev)")
+    hello.add_argument("--account", default=dev, help=f"account alias (default: {dev})")
     hello.set_defaults(func=_hello)
 
     data = sub.add_parser("data-check", help="confirm real-time SIP and OPRA market data access")
-    data.add_argument("--account", default="data", help="account alias (default: data)")
+    data_alias = app_config().accounts.data_alias
+    data.add_argument(
+        "--account", default=data_alias, help=f"account alias (default: {data_alias})"
+    )
     data.set_defaults(func=_data_check)
 
-    from tournament.marketdata.history import DATASETS, HISTORY_START
+    from tournament.marketdata.history import DATASETS, history_start
 
     history = sub.add_parser("history", help="shared historical market-data store")
     history_sub = history.add_subparsers(dest="history_command", required=True)
     dl = history_sub.add_parser("download", help="fill the store; days already on disk are skipped")
-    dl.add_argument("--start", type=date.fromisoformat, default=HISTORY_START)
+    dl.add_argument("--start", type=date.fromisoformat, default=history_start())
     dl.add_argument("--end", type=date.fromisoformat, help="default: yesterday")
     dl.add_argument(
         "--datasets",
@@ -188,9 +199,18 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="DATASET",
         help=f"any of: {', '.join(DATASETS)}",
     )
-    dl.add_argument("--max-dte", type=int, default=7, help="option expirations up to N days out")
+    universe = app_config().history.universe
     dl.add_argument(
-        "--strike-pct", type=float, default=0.05, help="strikes within this fraction of the open"
+        "--max-dte",
+        type=int,
+        default=universe.max_dte,
+        help="option expirations up to N days out",
+    )
+    dl.add_argument(
+        "--strike-pct",
+        type=float,
+        default=universe.strike_pct,
+        help="strikes within this fraction of the open",
     )
     dl.add_argument("--force", action="store_true", help="re-download days already on disk")
     dl.add_argument("--allow-during-session", action="store_true")

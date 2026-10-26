@@ -6,6 +6,7 @@ from alembic import context
 from sqlalchemy import create_engine, pool
 
 from tournament.db import database_url, metadata
+from tournament.orders import store as _tables  # noqa: F401  (registers the tables)
 
 config = context.config
 if config.config_file_name is not None:

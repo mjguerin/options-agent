@@ -63,7 +63,15 @@ cfg = EligibilityConfig()
 for out in outs:
     d = out.day.session_date
     ref = ReplayRun(workers(), USAGE, run_id="batch", dataset_id=DS).run_outputs([out])
-    s = LiveSession(out.day, cfg, usage=USAGE)
+    s = LiveSession(
+        out.day,
+        cfg,
+        usage=USAGE,
+        finalize_delay=pd.Timedelta(seconds=2).to_pytimedelta(),
+        halt_codes=frozenset({"H", "P"}),
+        resume_codes=frozenset({"T"}),
+        stale_after=pd.Timedelta(hours=1).to_pytimedelta(),
+    )
     eng = ShadowEngine(
         s, workers(), out.prior, out.rvol_baseline, usage=USAGE, run_id="live", dataset_id=DS
     )

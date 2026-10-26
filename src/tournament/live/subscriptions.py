@@ -15,12 +15,13 @@ from datetime import date
 
 import pandas as pd
 
-OCC_SPY = re.compile(r"^SPY(\d{6})([CP])(\d{8})$")
+from tournament.appconfig import app_config
 
 
 def parse_occ(symbol: str) -> tuple[date, str, float] | None:
-    """(expiration, right, strike) of an SPY OCC symbol, or None for any other symbol."""
-    m = OCC_SPY.match(symbol)
+    """(expiration, right, strike) of an OCC symbol of the configured underlying, or None for
+    any other symbol (MD-10)."""
+    m = re.match(rf"^{re.escape(app_config().underlying)}(\d{{6}})([CP])(\d{{8}})$", symbol)
     if not m:
         return None
     d = m.group(1)

@@ -6,8 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-EXCHANGE_TZ = ZoneInfo("America/New_York")
-REGULAR_CLOSE = time(16, 0)
+from tournament.appconfig import app_config
 
 
 @dataclass(frozen=True)
@@ -18,19 +17,21 @@ class SessionDay:
 
     @property
     def early_close(self) -> bool:
-        return self.close_utc.astimezone(EXCHANGE_TZ).time() < REGULAR_CLOSE
+        ex = app_config().exchange
+        return self.close_utc.astimezone(ex.tz).time() < ex.close_time
 
     @property
     def extended_start_utc(self) -> datetime:
-        """04:00 exchange time, the start of pre-market trading."""
-        return datetime.combine(self.session_date, time(4, 0), EXCHANGE_TZ).astimezone(
+        """The start of pre-market trading (04:00 exchange time unless configured otherwise)."""
+        ex = app_config().exchange
+        return datetime.combine(self.session_date, ex.extended_start_time, ex.tz).astimezone(
             self.open_utc.tzinfo
         )
 
     @property
     def extended_end_utc(self) -> datetime:
-        """Four hours after the close (20:00 on a normal day)."""
-        return self.close_utc + timedelta(hours=4)
+        """The configured hours after the close (20:00 on a normal day)."""
+        return self.close_utc + timedelta(hours=app_config().exchange.after_hours_hours)
 
 
 def session_from_exchange_times(
@@ -38,8 +39,9 @@ def session_from_exchange_times(
 ) -> SessionDay:
     """Build a session from exchange-local wall times (how Alpaca's calendar reports them)."""
     utc = ZoneInfo("UTC")
+    tz = app_config().exchange.tz
     return SessionDay(
         session_date=session_date,
-        open_utc=datetime.combine(session_date, open_local, EXCHANGE_TZ).astimezone(utc),
-        close_utc=datetime.combine(session_date, close_local, EXCHANGE_TZ).astimezone(utc),
+        open_utc=datetime.combine(session_date, open_local, tz).astimezone(utc),
+        close_utc=datetime.combine(session_date, close_local, tz).astimezone(utc),
     )

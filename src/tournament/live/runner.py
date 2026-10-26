@@ -18,6 +18,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from tournament.appconfig import app_config
 from tournament.features.pipeline import calendar_days, carry_context
 from tournament.live.engine import ShadowEngine
 from tournament.live.options_runner import OptionsCollector
@@ -37,9 +38,9 @@ def load_feed_config(path: Path = CONFIG) -> dict:
     return yaml.safe_load(path.read_text())
 
 
-def synthetic_session(minutes: int, now: datetime) -> SessionDay:
-    """A synthetic session for the test stream: starts at the next whole minute."""
-    open_utc = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
+def synthetic_session(minutes: int, now: datetime, lead_min: int) -> SessionDay:
+    """A synthetic session for the test stream: starts `lead_min` minutes ahead, on the minute."""
+    open_utc = (now + timedelta(minutes=lead_min)).replace(second=0, microsecond=0)
     return SessionDay(open_utc.date(), open_utc, open_utc + timedelta(minutes=minutes))
 
 
@@ -69,14 +70,14 @@ def make_engine(
     return ShadowEngine(session, all_workers(), prior, baseline, usage=Usage.LIVE)
 
 
-def latest_spy_price(creds) -> float:
+def latest_spy_price(creds, feed: str, symbol: str) -> float:
     from alpaca.data.historical import StockHistoricalDataClient
     from alpaca.data.requests import StockLatestTradeRequest
 
     client = StockHistoricalDataClient(creds.key_id, creds.secret_key)
     return float(
-        client.get_stock_latest_trade(StockLatestTradeRequest(symbol_or_symbols="SPY", feed="sip"))[
-            "SPY"
+        client.get_stock_latest_trade(StockLatestTradeRequest(symbol_or_symbols=symbol, feed=feed))[
+            symbol
         ].price
     )
 
@@ -93,16 +94,19 @@ def run_session(
     fc = load_feed_config()
     delay_s = yaml.safe_load(COMMON.read_text())["clock"]["finalize_delay_s"]
     test = mode == "test"
-    symbol = fc["test_symbol"] if test else fc["symbol"]
+    underlying = app_config().underlying
+    symbol = fc["test_symbol"] if test else underlying
     out = out_root / day.session_date.isoformat() / mode
     out.mkdir(parents=True, exist_ok=True)
     session = LiveSession(
         day,
         EligibilityConfig(),
         symbol=symbol,
-        rules_symbol=fc["symbol"],
+        rules_symbol=underlying,
         finalize_delay=timedelta(seconds=delay_s),
         stale_after=timedelta(seconds=fc["test_stale_after_s" if test else "stale_after_s"]),
+        halt_codes=frozenset(fc["halt_status_codes"]),
+        resume_codes=frozenset(fc["resume_status_codes"]),
         on_bar=lambda r: log.info(
             "slot %s %s close=%s trades=%s",
             r["slot"],
@@ -118,7 +122,13 @@ def run_session(
 
         try:
             collector = OptionsCollector(
-                fc["options"], creds, day, mode, latest_spy_price(creds), AlpacaHistory(creds)
+                fc["options"],
+                fc,
+                creds,
+                day,
+                mode,
+                latest_spy_price(creds, fc["spot_feed"], underlying),
+                AlpacaHistory(creds),
             )
         except Exception as exc:  # noqa: BLE001 - the SPY recording must go on without options
             log.exception("option feed not started: %s", exc)
@@ -131,14 +141,16 @@ def run_session(
             collector.on_bar(row)
 
         session.on_bar = on_bar
-    until = pd.Timestamp(day.close_utc) + session.delay + pd.Timedelta(seconds=1)
+    until = (
+        pd.Timestamp(day.close_utc) + session.delay + pd.Timedelta(seconds=fc["shutdown_grace_s"])
+    )
     with (out / "stream.jsonl").open("a") as journal:
 
         def record(msgs: list[dict], received: pd.Timestamp) -> None:
             journal.write(json.dumps({"r": received.isoformat(), "m": msgs}) + "\n")
 
         stream = AlpacaStockStream(
-            fc["test_url"] if test else fc["sip_url"],
+            "test" if test else "sip",
             key_id,
             secret,
             [symbol],
@@ -150,6 +162,8 @@ def run_session(
             on_frame=record,
             tick_s=fc["tick_s"],
             backoff_s=tuple(fc["reconnect_backoff_s"]),
+            ping_interval_s=fc["ping_interval_s"],
+            handshake_timeout_s=fc["handshake_timeout_s"],
         )
 
         async def main() -> None:

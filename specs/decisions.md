@@ -84,6 +84,15 @@ file, not in code and not in `.env`: risk limits are part of the manifest (FR-09
 agent can't read `.env` (AG-11). `TOURNAMENT_RISK_CONFIG` selects a different file. A change is a
 new version and a new evaluation segment.
 
+## Step 3: orders and configuration (DRAFT, awaiting owner approval)
+
+| ID | Decision | Status | Where | Notes |
+|---|---|---|---|---|
+| D-59 | **Configuration rule.** Any value that could reasonably change lives in a YAML file under `config/`, never in code: app settings (`config/app`), feed and options (`config/live`), risk (`config/risk`), orders (`config/orders`), features and strategies (as before). A missing or invalid value stops startup; there are no defaults in code. What stays in code: the paper-only broker endpoint and the rule that shadow and paper accept only real-time feeds (safety invariants, NFR-06, MD-09); dataset names and schemas; provider protocol facts; the CTS condition-combination rules (source rules, not tunables) | AGREED (owner, 2026-10-26) | appconfig.py, config/app | A test fails if a URL appears in source. Frozen `specs-v1` configs were not edited |
+| D-60 | **Order types (D08).** Entry: a limit order at the ask (offset in ticks, default 0), day. Exit: a limit at the bid, day. A mid basis rounds against the trader (up for buys, down for sells). If nothing is bid, the exit goes at one tick so it can't be left behind. Client order ID: prefix, account, candidate hash, purpose and replacement number, so it is deterministic | DRAFT | config/orders, orders/manager.py | Limit at the ask is marketable, so it fills unless the market moves away |
+| D-61 | **Timeouts and replacement limits (D08).** Entry: cancel after 5 s unfilled; no replacement (the signal is dropped); a partly filled entry keeps its fill and the rest is cancelled. Exit: cancel after 3 s; up to 3 replacements, each one tick lower; then a market order. Entry replacements, when enabled, step up 1 tick each and never beyond 3 ticks from the first limit | DRAFT | config/orders | A market exit is the last resort and is recorded as such |
+| D-62 | **Uncertain submissions and exposure (OM-03, OM-05, OM-06).** The intent is stored before anything is sent. After a timeout the order is looked up by client order ID up to 3 times; only a confirmed absence allows one resubmission with the same ID. An unreachable broker never counts as absence. A cancel is confirmed by lookup, since a fill can beat it. After a restart every in-flight order is settled before new work. Broker positions our fills don't explain block new entries until cleared | DRAFT | orders/manager.py | Found and fixed while testing: entry and exit IDs collided |
+
 ## Kept as stated in the review
 
 - Every strategy answer in review §§7–11: Q-BRT-1/2, Q-FBR-1/2, Q-ORB-1/2, Q-VMR-1/2/3 and

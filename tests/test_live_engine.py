@@ -36,7 +36,14 @@ def trade(slot: int, price: float, i: int) -> dict:
 
 
 def start(workers):
-    s = LiveSession(DAY, CFG, stale_after=timedelta(hours=1))
+    s = LiveSession(
+        DAY,
+        CFG,
+        finalize_delay=timedelta(seconds=2),
+        halt_codes=frozenset({"H", "P"}),
+        resume_codes=frozenset({"T"}),
+        stale_after=timedelta(hours=1),
+    )
     eng = ShadowEngine(s, workers, PriorContext(0.2, 501, 499, 500), None, usage=Usage.LIVE)
     s.on_connected(pd.Timestamp(DAY.extended_start_utc) - pd.Timedelta(minutes=1))
     return s, eng

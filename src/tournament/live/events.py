@@ -11,11 +11,6 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-# Trading status codes that stop trading until a `T` (trading resumption) arrives.
-# `H` halt, `P` volatility (LULD) pause. `Q` is a quotation resumption: still no trading.
-HALT_CODES = frozenset({"H", "P"})
-RESUME_CODES = frozenset({"T"})
-
 
 @dataclass(frozen=True)
 class TradeIn:

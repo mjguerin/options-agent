@@ -9,8 +9,9 @@ holds one per feed and fans the data out (FR-03).
 The stock stream (JSON) and the option stream (MessagePack only, see option_stream.py) differ
 only in encoding and in what they subscribe to.
 
-Feed guard: paper and shadow modes accept only the SIP URL. The test URL (a synthetic symbol,
-available around the clock) is accepted only in test mode.
+Feed guard (code, not configuration): paper and shadow modes accept only the real-time `sip`
+feed. The `test` feed (a synthetic symbol, available around the clock) is accepted only in test
+mode. The URLs behind the two feed kinds are in config/app.
 """
 
 from __future__ import annotations
@@ -24,11 +25,12 @@ from datetime import UTC, datetime
 import pandas as pd
 import websockets
 
+from tournament.appconfig import app_config
+
 log = logging.getLogger(__name__)
 
-SIP_URL = "wss://stream.data.alpaca.markets/v2/sip"
-TEST_URL = "wss://stream.data.alpaca.markets/v2/test"
 MODES = ("shadow", "paper", "test")
+STOCK_FEEDS = ("sip", "test")
 
 
 class FeedGuardError(RuntimeError):
@@ -39,12 +41,18 @@ class FatalStreamError(RuntimeError):
     """Authentication or entitlement failures: retrying can't help."""
 
 
-def check_feed(url: str, mode: str) -> None:
+def check_feed(feed: str, mode: str) -> None:
     if mode not in MODES:
         raise FeedGuardError(f"unknown mode {mode!r}")
-    expected = TEST_URL if mode == "test" else SIP_URL
-    if url != expected:
-        raise FeedGuardError(f"{mode} mode requires {expected}, got {url}")
+    if feed not in STOCK_FEEDS:
+        raise FeedGuardError(f"unknown stock feed {feed!r}")
+    expected = "test" if mode == "test" else "sip"
+    if feed != expected:
+        raise FeedGuardError(f"{mode} mode requires the {expected} feed, got {feed}")
+
+
+def stock_url(feed: str) -> str:
+    return getattr(app_config().endpoints.stock_stream, feed)
 
 
 def now_utc() -> pd.Timestamp:
@@ -65,14 +73,17 @@ class MarketDataStream:
         on_disconnected: Callable[[pd.Timestamp], None],
         on_tick: Callable[[pd.Timestamp], None],
         on_frame: Callable[[list[dict], pd.Timestamp], None] | None = None,
-        tick_s: float = 0.25,
-        backoff_s: tuple[float, ...] = (1, 2, 4, 8, 15, 30),
+        tick_s: float,
+        backoff_s: tuple[float, ...],
+        ping_interval_s: float,
+        handshake_timeout_s: float,
         clock: Callable[[], pd.Timestamp] = now_utc,
     ) -> None:
         self.url, self._key, self._secret = url, key_id, secret
         self.on_messages, self.on_connected = on_messages, on_connected
         self.on_disconnected, self.on_tick, self.on_frame = on_disconnected, on_tick, on_frame
         self.tick_s, self.backoff_s, self.clock = tick_s, backoff_s, clock
+        self.ping_interval_s, self.handshake_timeout_s = ping_interval_s, handshake_timeout_s
         self.connects = 0
         self.errors: list[tuple[pd.Timestamp, int | None, str]] = []
 
@@ -99,7 +110,10 @@ class MarketDataStream:
             try:
                 headers = {"Content-Type": self.content_type} if self.content_type else None
                 async with websockets.connect(
-                    self.url, max_size=None, ping_interval=10, additional_headers=headers
+                    self.url,
+                    max_size=None,
+                    ping_interval=self.ping_interval_s,
+                    additional_headers=headers,
                 ) as ws:
                     await self._handshake(ws)
                     self.connects += 1
@@ -124,7 +138,7 @@ class MarketDataStream:
             await asyncio.sleep(self.tick_s)
 
     async def _expect(self, ws, ok: Callable[[dict], bool], what: str) -> list[dict]:
-        msgs = self.decode(await asyncio.wait_for(ws.recv(), timeout=10))
+        msgs = self.decode(await asyncio.wait_for(ws.recv(), timeout=self.handshake_timeout_s))
         for m in msgs:
             if m.get("T") == "error":
                 # 401/402 auth, 403 already authenticated, 406 connection limit, 409
@@ -173,9 +187,9 @@ class MarketDataStream:
 
 
 class AlpacaStockStream(MarketDataStream):
-    def __init__(self, url: str, key_id: str, secret: str, symbols: list[str], *, mode: str, **kw):
-        check_feed(url, mode)
-        super().__init__(url, key_id, secret, **kw)
+    def __init__(self, feed: str, key_id: str, secret: str, symbols: list[str], *, mode: str, **kw):
+        check_feed(feed, mode)
+        super().__init__(stock_url(feed), key_id, secret, **kw)
         self.symbols = symbols
 
     async def on_authenticated(self, ws) -> None:

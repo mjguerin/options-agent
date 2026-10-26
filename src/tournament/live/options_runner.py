@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from tournament.appconfig import app_config
 from tournament.live.option_stream import AlpacaOptionStream
 from tournament.live.quotes import OptionFeed
 from tournament.live.stream import FatalStreamError, FeedGuardError
@@ -24,19 +25,25 @@ log = logging.getLogger(__name__)
 
 
 class OptionsCollector:
-    def __init__(self, cfg: dict, creds, day, mode: str, spot: float, history) -> None:
+    def __init__(
+        self, cfg: dict, stream_cfg: dict, creds, day, mode: str, spot: float, history
+    ) -> None:
         self.cfg, self.day, self.mode = cfg, day, mode
         self.error: str | None = None
         d = day.session_date
         self.expirations = {d + timedelta(days=n) for n in cfg["watch_expiry_days"]}
         lo, hi = min(self.expirations), max(self.expirations)
-        raw = history.option_contracts("SPY", lo, hi, spot * 0.9, spot * 1.1).to_pandas()
+        span = cfg["contract_fetch_range_pct"]
+        raw = history.option_contracts(
+            app_config().underlying, lo, hi, spot * (1 - span), spot * (1 + span)
+        ).to_pandas()
         self.universe = OptionUniverse(raw[["symbol", "expiration", "strike", "right"]])
         self.manager = SubscriptionManager(cfg["max_symbols"])
         self.feed = OptionFeed(
             pd.Timedelta(seconds=cfg["quote_max_age_s"]),
             pd.Timedelta(seconds=cfg["quote_max_delivery_lag_s"]),
             pd.Timedelta(seconds=cfg["feed_silent_after_s"]),
+            cfg["quote_lag_window"],
         )
         self.open_ts = pd.Timestamp(day.open_utc)
         self.stream = AlpacaOptionStream(
@@ -45,6 +52,10 @@ class OptionsCollector:
             creds.secret_key,
             mode=mode,
             max_symbols=cfg["max_symbols"],
+            tick_s=stream_cfg["tick_s"],
+            backoff_s=tuple(stream_cfg["reconnect_backoff_s"]),
+            ping_interval_s=stream_cfg["ping_interval_s"],
+            handshake_timeout_s=stream_cfg["handshake_timeout_s"],
             on_messages=self.feed.on_messages,
             on_connected=self.feed.on_connected,
             on_disconnected=self.feed.on_disconnected,
