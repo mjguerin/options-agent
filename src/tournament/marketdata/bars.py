@@ -56,9 +56,11 @@ def _stage1(
     usage: Usage,
     listing_market: str,
     strip_marker: str | None = None,
+    state: LastState | None = None,
 ) -> pd.DataFrame:
     """Classify every trade and resolve last eligibility in order. Returns the frame with
-    columns: last_ok (SIP), vol_ok, info, unknown, flags."""
+    columns: last_ok (SIP), vol_ok, info, unknown, flags. `state` carries the SIP last state
+    across calls (the live builder resolves one slot at a time); a fresh one by default."""
     keys = trades["conditions"].map(
         lambda c: tuple(x for x in c if x != strip_marker) if strip_marker else tuple(c)
     )
@@ -71,12 +73,39 @@ def _stage1(
         unknown=cls.map(lambda c: c.unknown),
         cflags=cls.map(lambda c: c.flags),
     )
-    state = LastState(listing_market)
+    state = state if state is not None else LastState(listing_market)
     last_ok = np.zeros(len(df), dtype=bool)
     rules, exch, unk = df["_last"].to_numpy(), df["exchange"].to_numpy(), df["unknown"].to_numpy()
     for i in np.flatnonzero((rules != "NO") & ~unk):
         last_ok[i] = state.resolve(rules[i], exch[i])
     return df.assign(last_ok=last_ok)
+
+
+def slot_fields(df: pd.DataFrame, index: pd.Index) -> pd.DataFrame:
+    """Per-slot bar fields from stage-1 trades, without cumulative state. Shared by the batch
+    builder and the live builder (one slot at a time), so both aggregate identically."""
+    usable = ~df["unknown"] & ~df["info"]
+    px = df[usable & df["last_ok"]]  # E-1, E-2, E-4(a): one price population
+    vol = df[usable & df["vol_ok"]]  # E-3
+    g_px, g_vol = px.groupby("slot"), vol.groupby("slot")
+    agg = pd.DataFrame(index=index)
+    agg["open"] = g_px["price"].first()
+    agg["close"] = g_px["price"].last()
+    agg["high"] = g_px["price"].max()
+    agg["low"] = g_px["price"].min()
+    agg["volume"] = g_vol["size"].sum()
+    agg["trade_count"] = g_vol["size"].count()
+    agg["vwap_notional"] = (px["price"] * px["size"]).groupby(px["slot"]).sum()
+    agg["vwap_volume"] = g_px["size"].sum()
+    agg["quarantined_trades"] = df[df["unknown"]].groupby("slot").size()
+    for c in ("volume", "trade_count", "vwap_volume", "quarantined_trades"):
+        agg[c] = agg[c].fillna(0).astype("int64")
+    agg["vwap_notional"] = agg["vwap_notional"].fillna(0.0)
+    flagged = (
+        df[df["cflags"].map(bool)].groupby("slot")["cflags"].agg(lambda s: sorted(set().union(*s)))
+    )
+    agg["flags"] = flagged.reindex(agg.index).map(lambda v: v if isinstance(v, list) else [])
+    return agg
 
 
 def build_session_bars(
@@ -99,24 +128,7 @@ def build_session_bars(
     outside = ~t["slot"].between(1, n_slots)
     t = t[~outside].reset_index(drop=True)
     df = _stage1(t, day.session_date, cfg, usage, cfg.listing_market[symbol])
-
-    usable = ~df["unknown"] & ~df["info"]
-    px = df[usable & df["last_ok"]]  # E-1, E-2, E-4(a): one price population
-    vol = df[usable & df["vol_ok"]]  # E-3
-    g_px, g_vol = px.groupby("slot"), vol.groupby("slot")
-    agg = pd.DataFrame(index=pd.RangeIndex(1, n_slots + 1, name="slot"))
-    agg["open"] = g_px["price"].first()
-    agg["close"] = g_px["price"].last()
-    agg["high"] = g_px["price"].max()
-    agg["low"] = g_px["price"].min()
-    agg["volume"] = g_vol["size"].sum()
-    agg["trade_count"] = g_vol["size"].count()
-    agg["vwap_notional"] = (px["price"] * px["size"]).groupby(px["slot"]).sum()
-    agg["vwap_volume"] = g_px["size"].sum()
-    agg["quarantined_trades"] = df[df["unknown"]].groupby("slot").size()
-    for c in ("volume", "trade_count", "vwap_volume", "quarantined_trades"):
-        agg[c] = agg[c].fillna(0).astype("int64")
-    agg["vwap_notional"] = agg["vwap_notional"].fillna(0.0)
+    agg = slot_fields(df, pd.RangeIndex(1, n_slots + 1, name="slot"))
 
     status = np.where(agg["open"].notna(), PRESENT, KNOWN_NO_ELIGIBLE_TRADES).astype(object)
     uncertain = (agg["quarantined_trades"] > 0).to_numpy() | agg.index.isin(list(gap_slots))
@@ -129,10 +141,6 @@ def build_session_bars(
     agg["session_vwap"] = (agg["cum_vwap_notional"] / agg["cum_vwap_volume"]).where(
         agg["cum_vwap_volume"] > 0
     )
-    flagged = (
-        df[df["cflags"].map(bool)].groupby("slot")["cflags"].agg(lambda s: sorted(set().union(*s)))
-    )
-    agg["flags"] = flagged.reindex(agg.index).map(lambda v: v if isinstance(v, list) else [])
     agg["bar_start"] = [day.open_utc + timedelta(minutes=m - 1) for m in agg.index]
     agg["bar_end"] = [day.open_utc + timedelta(minutes=m) for m in agg.index]
     out = agg.reset_index()

@@ -1,4 +1,4 @@
-"""Command line entry point: `tournament keys check`, `hello`, `data-check`, `history`."""
+"""Command line entry point: `tournament keys check`, `hello`, `data-check`, `history`, `feed`."""
 
 from __future__ import annotations
 
@@ -119,6 +119,39 @@ def _history_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _feed_run(args: argparse.Namespace) -> int:
+    import logging
+    from datetime import UTC, datetime
+
+    from tournament.adapters.alpaca import DATA_ACCOUNT_ALIAS
+    from tournament.adapters.alpaca_history import AlpacaHistory
+    from tournament.live.runner import run_session, synthetic_session, today_session
+    from tournament.live.stream import FatalStreamError, FeedGuardError
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    try:
+        creds = load_alpaca_credentials(DATA_ACCOUNT_ALIAS)
+    except (MissingCredentialsError, InsecureEnvFileError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    if args.test_minutes:
+        mode, day = "test", synthetic_session(args.test_minutes, datetime.now(UTC))
+    else:
+        mode = "shadow"
+        day = today_session(AlpacaHistory(creds).calendar, date.today())
+        if day is None:
+            print("Not a trading session today; nothing to run.")
+            return 0
+    out_root = Path(os.environ.get("TOURNAMENT_DATA_DIR", REPO_ROOT / "data")) / "live"
+    try:
+        s = run_session(day, mode, creds.key_id, creds.secret_key, out_root)
+    except (FeedGuardError, FatalStreamError) as exc:
+        print(f"Feed stopped: {exc}", file=sys.stderr)
+        return 1
+    print(f"{mode}: {s.builder.finalized} slots, {s.counts['trades']} trades; see {out_root}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tournament")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -161,6 +194,16 @@ def build_parser() -> argparse.ArgumentParser:
     dl.set_defaults(func=_history_download)
     status = history_sub.add_parser("status", help="what the store holds")
     status.set_defaults(func=_history_status)
+
+    feed = sub.add_parser("feed", help="the shared live SPY feed")
+    feed_sub = feed.add_subparsers(dest="feed_command", required=True)
+    run = feed_sub.add_parser("run", help="record today's session (shadow) through the close")
+    run.add_argument(
+        "--test-minutes",
+        type=int,
+        help="use Alpaca's test stream for a synthetic N-minute session instead",
+    )
+    run.set_defaults(func=_feed_run)
     return parser
 
 

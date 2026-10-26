@@ -51,7 +51,7 @@ Goal: all five strategies are written down precisely and replay through the same
 **Data and features**
 
 - [x] Download SPY and SPY option history from February 2024 into daily Parquet files (684 sessions to 2026-10-22, 4.5 GB; verified complete Oct 23, 2026)
-- [ ] Build the event normalizer with gap, duplicate and late-event checks (MD-02, MD-03) (historical part done: interval status, gap/uncertainty handling, condition quarantine; live duplicate and late-event handling moves to Step 3's feed handler)
+- [x] Build the event normalizer with gap, duplicate and late-event checks (MD-02, MD-03) (historical part in Step 2; live part done Oct 26, 2026 in src/tournament/live: deduplication, late inputs, corrections, feed-health gaps, halts; D-48 to D-51 drafts)
 - [x] Build the shared feature engine, computing each feature once per event
 
 **Replay**
@@ -69,7 +69,7 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 
 **Live market data**
 
-- [ ] Live feed handler: one shared SIP + OPRA stream inside the engine process, fanned out to all five workers (FR-03)
+- [ ] Live feed handler: one shared SIP + OPRA stream inside the engine process, fanned out to all five workers (FR-03) (SIP part built Oct 26, 2026: `tournament feed run` records a shadow session; live bars identical to batch bars on 6 sample days. Still to do: live features and fan-out to the workers, OPRA stream)
 - [ ] Subscriptions limited to SPY and the option contracts in play, within stream limits (MD-08, MD-10)
 - [ ] Quote freshness and feature-readiness gates on entries (MD-04); stale feed halts entries (AC-08)
 - [ ] Startup rejects the indicative options feed in paper mode (MD-09, AC-23)

@@ -60,6 +60,18 @@ Approved (owner, 2026-10-25): every row is AGREED and frozen for `specs-v1`.
 | D-46 | Calendar (SD-02): a missing calendar or material contradiction flags the session `calendar_inconsistent` and disables new entries; existing reference and broker positions stay managed. Extended-hours prints alone are not a contradiction. Mid-session discovery keeps prior records and flags the experiment period | **AGREED** (owner, 2026-10-25); the four contradiction tests and their thresholds (15 min, 10 trades, close + 5 min) AGREED as drafted | SD-02 | Replaces "no strategy evaluates it". Detection is a Step 3 live check; replay uses the stored calendar |
 | D-47 | Data-quality wording (SD-03, SD-04): unknown codes, invalid combinations and unresolved rules without a scoped override all quarantine the slot; late discovery records the historical slot separately; VWAP is undefined before the first eligible contribution, unchanged through minutes with only VWAP-excluded trades, stays uncertain after a gap until approved reconciliation, and late contributions update state forward only | **AGREED** (owner, 2026-10-25) | SD-03, SD-04 | Wording only: the bar builder and feature engine already behaved this way |
 
+## Step 3: live feed (DRAFT, awaiting owner approval)
+
+These fill gaps SD-01 leaves to the live implementation ("heartbeat gap, stale feed", halts,
+late inputs). Replay and `specs-v1` behaviour are unchanged. Config: `config/live/feed-v1.yaml`.
+
+| ID | Decision | Status | Where | Notes |
+|---|---|---|---|---|
+| D-48 | **Feed health.** A slot is `DATA_MISSING_OR_UNCERTAIN` when the feed was not connected, or silent for more than `stale_after_s` = 5 s, at any time in [`bar_start`, `scheduled_finalization_at`). Silence is checked only from the regular open, because thin pre-market trading has normal gaps. The feed counts as unhealthy until the first subscription succeeds | DRAFT | live/health.py | SPY trades several times a second in regular hours, so 5 s of silence means a stuck feed. Consequence of SD-04: any disconnect leaves VWAP uncertain for the rest of the session |
+| D-49 | **Halts.** Trading status `H` (halt) or `P` (LULD pause) opens a halt; `T` closes it. A slot is `HALTED` when a halt overlaps [`bar_start`, `bar_end`). Priority: `HALTED`, then `DATA_MISSING_OR_UNCERTAIN`, then `PRESENT` / `KNOWN_NO_ELIGIBLE_TRADES`. A halt alone doesn't make VWAP uncertain | DRAFT | live/events.py, live/health.py | `Q` (quotation resumption) is still a halt |
+| D-50 | **Late trades, corrections and cancels.** A late trade counts toward VWAP only under a plain-YES last rule, because its own-time SIP state is unknown (note-dependent rules are excluded and counted); it never updates the last state. A cancel or correction of a pending trade edits its slot in place; of a finalized trade, it removes or replaces that trade's contribution at the next finalization. Unmatched ones are counted. Deduplication key: exchange, trade ID and timestamp | DRAFT | live/bars.py, live/session.py | Implements SD-01 "Late inputs" and SD-03 "Corrections and cancels" |
+| D-51 | **Pre-market levels live.** PMH and PML are valid only if the feed was healthy from 04:00 ET to the open; otherwise they are null and flagged `premarket_feed_uncertain`. So the engine starts before 04:00 ET | DRAFT | live/session.py | Sets the Supervisor start time (Step 3 operations) |
+
 ## Kept as stated in the review
 
 - Every strategy answer in review §§7–11: Q-BRT-1/2, Q-FBR-1/2, Q-ORB-1/2, Q-VMR-1/2/3 and
