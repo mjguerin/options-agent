@@ -118,6 +118,33 @@ class History(_Section):
     download_guard: DownloadGuard
 
 
+class Engine(_Section):
+    manifest: str | None
+    start_time: str
+    launch_time: str
+    late_after_close_s: float = Field(ge=0)
+    startsecs: int = Field(ge=1)
+    restart_attempts: int = Field(ge=0)
+    stop_wait_s: int = Field(gt=0)
+
+    @field_validator("start_time", "launch_time")
+    @classmethod
+    def _hhmm(cls, v: str) -> str:
+        _clock(v)
+        return v
+
+
+class Nightly(_Section):
+    start_time: str
+    weekdays_only: bool
+
+    @field_validator("start_time")
+    @classmethod
+    def _hhmm(cls, v: str) -> str:
+        _clock(v)
+        return v
+
+
 class Performance(_Section):
     classify_cache_size: int = Field(gt=0)
     rvol_history_depth_factor: int = Field(ge=1)
@@ -131,6 +158,8 @@ class AppConfig(_Section):
     endpoints: Endpoints
     database: Database
     history: History
+    engine: Engine
+    nightly: Nightly
     performance: Performance
 
     @property

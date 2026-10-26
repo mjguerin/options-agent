@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Starts the engine program a few minutes before it needs to be up (config/app engine.launch_time).
+     The engine decides for itself whether today is a session. Local time of the host. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.options-tournament.engine-start</string>
+	<key>UserName</key>
+	<string>__USER__</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/supervisorctl</string>
+		<string>-c</string>
+		<string>__RUN__/supervisord.conf</string>
+		<string>start</string>
+		<string>engine</string>
+	</array>
+	<key>StartCalendarInterval</key>
+	<array>
+__ENGINE_CALENDAR__
+	</array>
+	<key>StandardOutPath</key>
+	<string>__LOGS__/engine-start.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOGS__/engine-start.log</string>
+</dict>
+</plist>

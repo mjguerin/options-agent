@@ -44,6 +44,19 @@ history:
     end: "16:30"
     timezone_weekdays_only: true
 
+engine:                              # the daily engine job (BRD 9.3, 10.2)
+  manifest: null                     # path of the experiment manifest to run under; null = none
+  start_time: "03:55"                # exchange local time: wait for it, so pre-market is covered
+  launch_time: "03:50"               # when launchd starts the Supervisor program (a few min early)
+  late_after_close_s: 0              # a start later than close + this does nothing
+  startsecs: 10                      # Supervisor counts a start only after this many seconds up
+  restart_attempts: 3                # Supervisor start retries after a crash
+  stop_wait_s: 60                    # Supervisor waits this long for a clean stop
+
+nightly:                             # after-close job: history download and checks
+  start_time: "16:45"                # exchange local time; the download guard ends at 16:30
+  weekdays_only: true
+
 performance:
   classify_cache_size: 4096          # distinct sale-condition combinations cached
   rvol_history_depth_factor: 4       # past sessions kept per reference session, for gaps

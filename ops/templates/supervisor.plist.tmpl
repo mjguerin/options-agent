@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The tournament's Supervisor, started at boot with no login (NFR-13). Rendered by
+     `tournament ops render`. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.options-tournament.supervisor</string>
+	<key>UserName</key>
+	<string>__USER__</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/supervisord</string>
+		<string>-c</string>
+		<string>__RUN__/supervisord.conf</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>__HOME__</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>__LOGS__/supervisord.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOGS__/supervisord.out.log</string>
+</dict>
+</plist>

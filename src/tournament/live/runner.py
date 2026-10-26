@@ -35,6 +35,18 @@ COMMON = REPO_ROOT / "config" / "strategies" / "common-v1.yaml"
 log = logging.getLogger(__name__)
 
 
+def unique_run_dir(day_dir: Path, mode: str) -> Path:
+    """One directory per engine start: a restart after a crash never overwrites the outputs of
+    the run before it (shadow, shadow-r2, ...)."""
+    n = 1
+    while True:
+        out = day_dir / (mode if n == 1 else f"{mode}-r{n}")
+        if not (out / "stream.jsonl").exists():
+            out.mkdir(parents=True, exist_ok=True)
+            return out
+        n += 1
+
+
 class PreflightFailed(RuntimeError):
     def __init__(self, report: dict) -> None:
         super().__init__(f"preflight failed: {report['failures']}")
@@ -104,8 +116,7 @@ def run_session(
     test = mode == "test"
     underlying = app_config().underlying
     symbol = fc["test_symbol"] if test else underlying
-    out = out_root / day.session_date.isoformat() / mode
-    out.mkdir(parents=True, exist_ok=True)
+    out = unique_run_dir(out_root / day.session_date.isoformat(), mode)
     session = LiveSession(
         day,
         EligibilityConfig(),
@@ -215,11 +226,14 @@ def run_session(
                 tasks.append(collector.run(until))
             await asyncio.gather(*tasks)
 
-        asyncio.run(main())
-    session.tick(until)
-    write_outputs(
-        session, out, mode, stream.connects, engine, collector, accounts, preflight_report
-    )
+        try:
+            asyncio.run(main())
+        finally:
+            # a crash or a stop signal still leaves the bars, summary and records written so far
+            session.tick(min(until, pd.Timestamp.now(tz="UTC")))
+            write_outputs(
+                session, out, mode, stream.connects, engine, collector, accounts, preflight_report
+            )
     return session
 
 

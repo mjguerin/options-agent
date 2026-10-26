@@ -195,6 +195,45 @@ def _experiment_check(args: argparse.Namespace) -> int:
     return 0 if result.passed else 1
 
 
+def _data_root() -> Path:
+    return Path(os.environ.get("TOURNAMENT_DATA_DIR", REPO_ROOT / "data"))
+
+
+def _engine_daily(args: argparse.Namespace) -> int:
+    import logging
+
+    from tournament.ops.engine import run_daily
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    try:
+        return run_daily(REPO_ROOT, _data_root() / "live")
+    except (MissingCredentialsError, InsecureEnvFileError) as exc:
+        print(exc, file=sys.stderr)
+        return 3
+
+
+def _ops_nightly(args: argparse.Namespace) -> int:
+    import logging
+
+    from tournament.ops.nightly import run_nightly
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    today = app_config().exchange.tz
+    from datetime import datetime
+
+    return run_nightly(datetime.now(today).date(), _data_root())
+
+
+def _ops_render(args: argparse.Namespace) -> int:
+    from tournament.ops.render import render_all
+
+    for path in render_all(
+        app_config(), args.owner, Path(args.home), Path(args.repo), args.uv, Path(args.out)
+    ):
+        print(path)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tournament")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -273,6 +312,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="don't collect OPRA option quotes",
     )
     run.set_defaults(func=_feed_run)
+
+    eng = sub.add_parser("engine", help="the daily engine job (started by Supervisor)")
+    eng_sub = eng.add_subparsers(dest="engine_command", required=True)
+    daily = eng_sub.add_parser("daily", help="wait for the start time, run today's session")
+    daily.set_defaults(func=_engine_daily)
+
+    ops = sub.add_parser("ops", help="host jobs: nightly download, rendering the job files")
+    ops_sub = ops.add_subparsers(dest="ops_command", required=True)
+    nightly = ops_sub.add_parser("nightly", help="download missing history, check coverage")
+    nightly.set_defaults(func=_ops_nightly)
+    render = ops_sub.add_parser("render", help="render the Supervisor and launchd files")
+    render.add_argument("--owner", required=True)
+    render.add_argument("--home", required=True)
+    render.add_argument("--repo", default=str(REPO_ROOT))
+    render.add_argument("--uv", default="/opt/homebrew/bin/uv")
+    render.add_argument("--out", required=True)
+    render.set_defaults(func=_ops_render)
 
     exp = sub.add_parser("experiment", help="experiment manifests and the startup preflight")
     exp_sub = exp.add_subparsers(dest="experiment_command", required=True)

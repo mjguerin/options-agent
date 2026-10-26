@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- After-close job: history download and coverage check (config/app nightly.start_time). -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.options-tournament.nightly</string>
+	<key>UserName</key>
+	<string>__USER__</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__UV__</string>
+		<string>run</string>
+		<string>--project</string>
+		<string>__REPO__</string>
+		<string>tournament</string>
+		<string>ops</string>
+		<string>nightly</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>__REPO__</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>__HOME__</string>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/bin:/bin</string>
+	</dict>
+	<key>StartCalendarInterval</key>
+	<array>
+__NIGHTLY_CALENDAR__
+	</array>
+	<key>StandardOutPath</key>
+	<string>__LOGS__/nightly.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOGS__/nightly.log</string>
+</dict>
+</plist>

@@ -1,0 +1,42 @@
+; The tournament's own Supervisor (BRD 9.3). A separate instance from Homebrew's, with its own
+; socket, so it never loads another program's job file. Rendered by `tournament ops render`
+; from config/app/app-v1.yaml; do not edit the rendered copy.
+
+[unix_http_server]
+file=__RUN__/supervisor.sock
+chmod=0700
+
+[supervisord]
+logfile=__LOGS__/supervisord.log
+logfile_maxbytes=20MB
+logfile_backups=5
+pidfile=__RUN__/supervisord.pid
+childlogdir=__LOGS__
+nodaemon=true
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+[supervisorctl]
+serverurl=unix://__RUN__/supervisor.sock
+
+; Started by launchd at the pre-market time, not at boot, so an automatic restart can never load
+; code that is being edited in the evening. Exit 0 is a normal day or a deliberate skip; exit 3 is
+; a failed preflight (restarting would not fix it).
+[program:engine]
+command=__UV__ run --project __REPO__ tournament engine daily
+directory=__REPO__
+autostart=false
+autorestart=unexpected
+exitcodes=0,3
+startsecs=__STARTSECS__
+startretries=__RETRIES__
+stopsignal=INT
+stopwaitsecs=__STOPWAIT__
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=__LOGS__/engine.log
+stdout_logfile_maxbytes=50MB
+stdout_logfile_backups=10
+environment=HOME="__HOME__",PATH="/opt/homebrew/bin:/usr/bin:/bin"
