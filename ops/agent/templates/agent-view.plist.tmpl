@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Publishes the read-only view and the daily facts for the agent (config/agent view). -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.options-tournament.agent-view</string>
+	<key>UserName</key>
+	<string>__USER__</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__UV__</string>
+		<string>run</string>
+		<string>--project</string>
+		<string>__REPO__</string>
+		<string>tournament</string>
+		<string>agent</string>
+		<string>publish</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>__REPO__</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>__HOME__</string>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/bin:/bin</string>
+	</dict>
+	<key>StartCalendarInterval</key>
+	<array>
+__VIEW_CALENDAR__
+	</array>
+	<key>StandardOutPath</key>
+	<string>__LOGS__/agent-view.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOGS__/agent-view.log</string>
+</dict>
+</plist>

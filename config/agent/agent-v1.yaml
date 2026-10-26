@@ -1,0 +1,51 @@
+# The agent: who it runs as, what it may read, and the daily narrative job (BRD 13; AG-06..AG-13,
+# AC-13, AC-14, AC-24). DRAFT. No defaults in code.
+#
+# The agent is Claude Code running as a separate macOS user. The operating system, not the
+# prompt, keeps it away from broker keys and the trading database: it cannot read the owner's
+# home (where .env lives), its database role can only SELECT, and it works from a read-only
+# snapshot ("the view") that the owner's account publishes after the close. The narrative job
+# never touches the engine: if it fails or is slow, trading is not affected (AG-09).
+
+version: agent-v1-draft
+
+host:
+  os_user: mgagent                   # the agent's macOS account (must exist; no admin rights)
+  db_role: mgagent                   # its PostgreSQL role: SELECT only, read-only transactions
+  database: options_tournament
+  owner_db_role: mgmini              # the role that owns the tables (default grants follow it)
+  db_connection_limit: 3
+  db_statement_timeout_s: 30
+  shared_root: /Users/Shared/options-tournament   # readable by both accounts
+  view_dir: view                     # under shared_root: written by the owner, read-only to the agent
+  narratives_dir: narratives         # under shared_root: written by the agent, read by the owner
+  agent_logs_dir: logs               # under shared_root: the agent's tool-call logs (AG-08)
+  python: /opt/homebrew/bin/python3.12
+  claude_bin: /Users/mgagent/.local/bin/claude
+
+view:                                # what the owner's account copies for the agent to read
+  publish_time: "17:00"              # exchange local time: after the nightly download (16:45)
+  weekdays_only: true
+  include_dirs: [specs, config, src, tests, ops, migrations, research]
+  include_files: ["Options Strategy Tournament — Project Plan.md", README.md, pyproject.toml]
+  live_files: ["ledger/*.json", "ops/*.json"]   # under data/live/<day>/<run>/; small result files
+  exclude_names: [.env, .git, __pycache__, .venv, .pytest_cache, .ruff_cache, "*.parquet", "*.pyc"]
+  max_file_mb: 5                     # a larger file is left out, and listed in the manifest
+  sessions_back: 10                  # facts are written for this many recent sessions
+  secret_scan_min_chars: 8           # a .env value this long found in a published file stops it
+
+narrative:
+  start_time: "17:15"                # after the view is published
+  weekdays_only: true
+  model: sonnet
+  max_turns: 12
+  timeout_s: 900
+  prompt_file: config/agent/narrative-prompt-v1.md
+  allowed_tools: [Read, Grep, Glob]  # read the view only: no shell, no network, no writes
+  disallowed_tools: [Bash, Write, Edit, NotebookEdit, WebFetch, WebSearch, Task]
+  output_format: stream-json         # every tool call is logged (AG-08)
+  min_words: 80                      # shorter output is treated as a failure, not published
+
+interactive:                         # settings for the owner's own sessions as the agent user
+  allowed_tools: [Read, Grep, Glob, "Bash(psql:*)"]
+  disallowed_tools: [Write, Edit, NotebookEdit, WebFetch, WebSearch]

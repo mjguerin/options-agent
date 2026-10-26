@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Daily narrative: a headless Claude Code run as the agent user (config/agent narrative). -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.options-tournament.agent-narrative</string>
+	<key>UserName</key>
+	<string>__AGENT_USER__</string>
+	<key>ProgramArguments</key>
+	<array>
+__ARGS__
+	</array>
+	<key>WorkingDirectory</key>
+	<string>__VIEW__</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>__AGENT_HOME__</string>
+		<key>PATH</key>
+		<string>__AGENT_HOME__/.local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+	</dict>
+	<key>StartCalendarInterval</key>
+	<array>
+__CALENDAR__
+	</array>
+	<key>StandardOutPath</key>
+	<string>__SHARED__/logs/narrative-job.log</string>
+	<key>StandardErrorPath</key>
+	<string>__SHARED__/logs/narrative-job.log</string>
+</dict>
+</plist>

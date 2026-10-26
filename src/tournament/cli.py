@@ -236,6 +236,39 @@ def _ops_render(args: argparse.Namespace) -> int:
     return 0
 
 
+def _agent_publish(args: argparse.Namespace) -> int:
+    import logging
+    from datetime import datetime
+
+    from tournament.agent.publish import run_publish
+    from tournament.agent.view import SecretLeak
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    day = (
+        datetime.strptime(args.date, "%Y-%m-%d").date()
+        if args.date
+        else datetime.now(app_config().exchange.tz).date()
+    )
+    try:
+        return run_publish(day, REPO_ROOT, _data_root())
+    except SecretLeak as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+
+def _agent_render(args: argparse.Namespace) -> int:
+    from tournament.agent.config import load_agent_config
+    from tournament.agent.render import render_agent
+
+    cfg = app_config()
+    for path in render_agent(
+        load_agent_config(), cfg.exchange.timezone, args.owner, Path(args.home),
+        Path(args.repo), args.uv, Path(args.out),
+    ):  # fmt: skip
+        print(path)
+    return 0
+
+
 def _alerts_run(args: argparse.Namespace) -> int:
     import logging
 
@@ -489,6 +522,19 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--uv", default="/opt/homebrew/bin/uv")
     render.add_argument("--out", required=True)
     render.set_defaults(func=_ops_render)
+
+    agent = sub.add_parser("agent", help="the read-only agent: view, facts, host files")
+    agent_sub = agent.add_subparsers(dest="agent_command", required=True)
+    pub = agent_sub.add_parser("publish", help="write the day's facts and the read-only view")
+    pub.add_argument("--date", help="YYYY-MM-DD; default today")
+    pub.set_defaults(func=_agent_publish)
+    arender = agent_sub.add_parser("render", help="render the agent's job files and settings")
+    arender.add_argument("--owner", required=True)
+    arender.add_argument("--home", required=True)
+    arender.add_argument("--repo", default=str(REPO_ROOT))
+    arender.add_argument("--uv", default="/opt/homebrew/bin/uv")
+    arender.add_argument("--out", required=True)
+    arender.set_defaults(func=_agent_render)
 
     exp = sub.add_parser("experiment", help="experiment manifests and the startup preflight")
     exp_sub = exp.add_subparsers(dest="experiment_command", required=True)

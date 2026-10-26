@@ -99,10 +99,10 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 
 **Agent**
 
-- [ ] Separate macOS user with a read-only DB role and no read access to `.env` (AG-11)
+- [ ] Separate macOS user with a read-only DB role and no read access to `.env` (AG-11) (built Oct 26, 2026: src/tournament/agent, config/agent, ops/host/setup_agent.sh and verify_agent.sh, 24 tests; D-84, D-85 drafts; ticked when the owner has run `sudo ops/host/setup_agent.sh` and every isolation check passes)
 - [ ] Claude Code installed and signed in to your Pro plan; Remote Control tested
 - [ ] Optional: Telegram channel, allowlist only you (AG-12)
-- [ ] After-close headless job for the daily narrative (AG-13)
+- [ ] After-close headless job for the daily narrative (AG-13) (built Oct 26, 2026: facts, view publisher, headless runner and launchd jobs, D-86, D-87 drafts; ticked after the first real narrative, which needs Claude Code signed in as the agent)
 
 **Gate:** AC-01 to AC-16 and AC-21 to AC-24 pass in shadow mode.
 
