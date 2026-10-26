@@ -81,6 +81,10 @@ def _check_permissions(path: Path) -> None:
         )
 
 
+class LiveCredentialsRejectedError(RuntimeError):
+    """A key that is not a paper key: this system trades paper only (AC-15)."""
+
+
 def load_alpaca_credentials(account_alias: str, path: Path | None = None) -> AlpacaCredentials:
     path = path or env_file()
     if not path.is_file():
@@ -94,6 +98,10 @@ def load_alpaca_credentials(account_alias: str, path: Path | None = None) -> Alp
     if not key_id or not secret_key:
         raise MissingCredentialsError(
             f"{path} has no {key_var} and {secret_var} for account alias {account_alias!r}"
+        )
+    if key_id.strip().upper().startswith("AK"):  # Alpaca live keys begin AK, paper keys PK
+        raise LiveCredentialsRejectedError(
+            f"{key_var} looks like a live-trading key; only paper keys are accepted"
         )
     return AlpacaCredentials(account_alias, key_id, secret_key)
 

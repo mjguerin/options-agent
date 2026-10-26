@@ -286,6 +286,26 @@ def test_the_cutoff_and_a_stop_together_make_one_exit_with_both_reasons():
     assert len(sells) == 1 and set(sells[0].reasons) == {"SESSION_CUTOFF", "PREMIUM_STOP"}
 
 
+def test_every_exit_trigger_at_once_sells_the_position_only_once():  # AC-07
+    rt, sim, m = build()
+    rt.cutoff_at = at(12)
+    hold(rt, m)
+    prices(m, at(12), call=(1.0, 1.01))
+    cand_id = rt._candidate_of(CALL)
+    rt.on_reference_exit(at(12), cand_id, "TARGET")  # the strategy's own exit
+    rt.close_position(at(12), CALL)  # the operator
+    rt.flatten(at(12))  # the operator again
+    rt.on_tick(at(12))  # the cutoff and the stop
+    rt.on_tick(at(12.5))  # and the next tick, before any fill
+    sells = [i for i in rt.store.all_for("acct:vpc") if i.purpose is Purpose.EXIT]
+    assert len(sells) == 1 and sells[0].qty_intended <= 13
+    assert {"REF_TARGET", "OPERATOR_CLOSE", "OPERATOR_FLATTEN"} <= set(sells[0].reasons)
+    for s in (13, 14):
+        prices(m, at(s), call=(1.0, 1.01))
+        rt.on_tick(at(s))
+    assert rt.orders.position(CALL) == 0  # sold once, never short
+
+
 def test_a_quote_that_cannot_be_trusted_never_triggers_the_stop():
     rt, sim, m = build()
     hold(rt, m)

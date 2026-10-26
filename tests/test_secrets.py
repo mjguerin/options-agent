@@ -4,6 +4,7 @@ import pytest
 
 from tournament.secrets import (
     InsecureEnvFileError,
+    LiveCredentialsRejectedError,
     MissingCredentialsError,
     load_alpaca_credentials,
 )
@@ -52,3 +53,10 @@ def test_secret_never_in_repr(env_file):
     creds = load_alpaca_credentials("dev")
     assert "s3cret" not in repr(creds)
     assert "PKTEST" not in str(creds)
+
+
+def test_a_live_looking_key_is_rejected(env_file):  # AC-15
+    env_file("ALPACA_DEV_KEY_ID=AKLIVE123\nALPACA_DEV_SECRET_KEY=s3cret\n")
+    with pytest.raises(LiveCredentialsRejectedError) as exc:
+        load_alpaca_credentials("dev")
+    assert "AKLIVE123" not in str(exc.value) and "s3cret" not in str(exc.value)

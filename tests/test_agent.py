@@ -331,3 +331,14 @@ def test_the_narrative_runner_script_runs_standalone(tmp_path):
         capture_output=True, text=True,
     )  # fmt: skip
     assert done.returncode == 0 and "--view" in done.stdout
+
+
+def test_the_trading_code_never_imports_the_agent():  # AC-14
+    """Nothing the engine, orders, risk or alerts need can depend on the agent. Only the CLI may
+    reach it, and only inside its own command."""
+    src = REPO / "src" / "tournament"
+    for f in src.rglob("*.py"):
+        if "agent" in f.relative_to(src).parts[:1] or f.name == "cli.py":
+            continue
+        text = f.read_text()
+        assert "tournament.agent" not in text, f"{f.relative_to(src)} reaches the agent"
