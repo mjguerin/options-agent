@@ -176,12 +176,13 @@ def test_every_job_file_renders_without_placeholders(rendered):
         assert "__" not in f.read_text().replace("__main__", "")
 
 
-def test_the_alert_bot_runs_all_day_and_restarts_itself(rendered):
+@pytest.mark.parametrize("program, cmd", [("alerts", "alerts run"), ("api", "api run")])
+def test_the_alert_bot_and_the_api_run_all_day_and_restart_themselves(rendered, program, cmd):
     cp = configparser.RawConfigParser()
     cp.read(rendered["supervisord.conf"])
-    p = cp["program:alerts"]
+    p = cp[f"program:{program}"]
     assert p["autostart"] == "true" and p["autorestart"] == "true"
-    assert "tournament alerts run" in p["command"]
+    assert f"tournament {cmd}" in p["command"]
 
 
 def test_the_engine_program_follows_the_app_config(rendered):

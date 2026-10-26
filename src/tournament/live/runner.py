@@ -22,8 +22,11 @@ from tournament.alerts.bot import heartbeat_path
 from tournament.alerts.config import load_alerts_config
 from tournament.alerts.incidents import Incidents
 from tournament.alerts.monitor import SessionMonitor
+from tournament.api.config import load_api_config
+from tournament.api.store import ControlStore
 from tournament.appconfig import app_config
 from tournament.features.pipeline import calendar_days, carry_context
+from tournament.live.controls import ControlPlane
 from tournament.live.engine import ShadowEngine
 from tournament.live.options_runner import OptionsCollector
 from tournament.live.session import LiveSession
@@ -209,8 +212,33 @@ def run_session(
             accounts,
         )
 
+    control = None
+    if accounts is not None and fc["controls"]["enabled"]:
+        try:
+            from tournament.orders.store import default_engine
+
+            api_cfg = load_api_config()
+            try:
+                queue = ControlStore(default_engine())
+            except Exception:  # noqa: BLE001 - state is still published; commands just can't arrive
+                log.exception("control queue unavailable")
+                queue = None
+            control = ControlPlane(
+                queue,
+                api_cfg,
+                accounts.router.runtimes,
+                heartbeat_path(REPO_ROOT, api_cfg.state.file),
+                session,
+                mode,
+                collector,
+            )
+        except Exception:  # noqa: BLE001
+            log.exception("controls not started")
+
     def on_tick(now: pd.Timestamp) -> None:
         session.tick(now)
+        if control is not None:
+            control.tick(now)  # commands first: an operator pause beats a new entry
         if accounts is not None:
             accounts.tick(now)
         if monitor is not None:

@@ -1,0 +1,54 @@
+# Control API (BRD 14; NFR-08, NFR-14; RK-02). DRAFT.
+#
+# The API is a separate program from the engine. It never touches orders or accounts itself: it
+# authenticates the caller, records what was asked, and puts a command in a queue that the engine
+# reads and applies. A restart of the API therefore cannot stop or restart the engine. Every
+# attempt, accepted or refused, leaves a durable audit record.
+#
+# Tokens are in .env (API_OWNER_TOKEN, API_VIEWER_TOKEN), never here. The address must be a
+# loopback address; the code refuses anything else (NFR-14). No defaults in code.
+
+version: api-v1-draft
+
+server:
+  host: 127.0.0.1                    # loopback only; reach it through an SSH tunnel
+  port: 8800
+
+state:
+  file: data/run/engine.state.json   # the engine publishes accounts and feeds here for the API
+  every_s: 5
+  max_age_s: 30                      # older than this, the API reports the engine as not reporting
+
+commands:
+  ttl_s: 120                         # a command the engine has not applied by then expires
+  poll_s: 1                          # how often the engine looks for commands
+  confirmation_ttl_s: 60             # a confirmation is valid this long, once, for exactly one action
+  audit_page_size: 100
+
+# Distinct controls (BRD 14). `confirm: true` = exposure-changing: two steps, authenticated.
+controls:
+  PAUSE_ENTRIES:
+    scopes: [account, global]
+    confirm: false
+    summary: "Stop new entries. Positions and exits are untouched."
+  RESUME_ENTRIES:
+    scopes: [account, global]
+    confirm: true
+    summary: "Allow new entries again, after the engine re-validates readiness."
+  CANCEL_PENDING:
+    scopes: [account, global]
+    confirm: false
+    summary: "Cancel entry orders that have not filled. Held positions are untouched."
+  CLOSE_POSITION:
+    scopes: [account]
+    confirm: true
+    needs_symbol: true
+    summary: "Sell one held contract position."
+  FLATTEN_ACCOUNT:
+    scopes: [account]
+    confirm: true
+    summary: "Cancel pending entries, sell every position, and halt entries for the account."
+  EMERGENCY:
+    scopes: [global]
+    confirm: true
+    summary: "Flatten every account and halt all entries."

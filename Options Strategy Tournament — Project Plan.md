@@ -92,7 +92,7 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 
 - [ ] Preflight: clean tree, HEAD at manifest tag, OPRA feed, paper endpoint only (NFR-15, MD-09) (git, tag, approval, config-hash and OPRA checks built and tested; the paper-endpoint and account-identity checks need the paper runtime in Step 4)
 - [ ] Supervisor programs: engine at a fixed pre-market time, API, dashboard, alert bot (engine program, nightly job and installer built and tested, D-67 to D-69; waiting for the owner to run `sudo ops/host/setup_jobs.sh`; the API, dashboard and alert bot programs come with those items)
-- [ ] FastAPI controls: pause, resume, cancel, close, flatten, emergency (BRD 14)
+- [x] FastAPI controls: pause, resume, cancel, close, flatten, emergency (BRD 14) (src/tournament/api, migration 0004, engine-side control plane, 33 tests; D-73 to D-76 drafts; waiting for the owner to add API_OWNER_TOKEN and API_VIEWER_TOKEN to .env)
 - [ ] Streamlit dashboard bound to localhost; reach it through an SSH tunnel
 - [ ] Telegram alert bot in deterministic code (built Oct 26, 2026: incidents and outbox in PostgreSQL migration 0003, sender, bot with watchdogs, engine-side monitor, Supervisor program, D-70 to D-72 drafts, 24 tests with a fake sender; waiting for TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env to send the first real message)
 - [ ] Evaluation ledger beside the broker ledger (BRD 12.3)

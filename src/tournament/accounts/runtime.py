@@ -76,6 +76,9 @@ class AccountRuntime:
     decisions: list[EntryDecision] = field(default_factory=list)
     exits_requested: list[tuple[pd.Timestamp, str, str]] = field(default_factory=list)
     halted: str | None = None
+    operator_halt: str | None = (
+        None  # set by an operator control; cleared only by a validated resume
+    )
 
     def __post_init__(self) -> None:
         self.guard = DailyLossGuard(self.risk.daily_loss, self.risk.sizing.contract_multiplier)
@@ -99,6 +102,8 @@ class AccountRuntime:
             return self._reject(cid, "CANDIDATE_EXPIRED")
         if self.halted:
             return self._reject(cid, self.halted)
+        if self.operator_halt:
+            return self._reject(cid, self.operator_halt)
         if self.orders.entries_blocked:
             return self._reject(cid, "ENTRIES_BLOCKED")
         if not self.quotes.entries_allowed(now):
@@ -148,6 +153,58 @@ class AccountRuntime:
         if intent.status is Status.REJECTED:
             self.ledger.release(now, self.binding, cid, "BROKER_REJECTED")
         return EntryDecision(cid, True, (), sel, size, intent)
+
+    # ---- operator controls (BRD 14; RK-02) ---------------------------------------------------
+    # Pausing entries, cancelling pending orders and closing positions are different things and
+    # are different methods. None of them changes strategy state (D-33).
+    def operator_pause(self, now: pd.Timestamp) -> dict:
+        self.operator_halt = "OPERATOR_PAUSE"
+        self.store.event(self.binding, now, "operator_pause")
+        return {"entries": "paused"}
+
+    def operator_resume(self, now: pd.Timestamp) -> tuple[bool, list[str]]:
+        """Resume only after validation: the day's loss limit stands, and nothing unresolved."""
+        why = []
+        if self.halted == "DAILY_LIMIT":
+            why.append("DAILY_LIMIT")
+        if self.orders.entries_blocked:
+            why.append("ENTRIES_BLOCKED")
+        if not self.quotes.entries_allowed(now):
+            why.append("OPTION_FEED_DOWN")
+        unresolved = {Status.UNCERTAIN, Status.NOT_FOUND, Status.CANCEL_REQUESTED, Status.SUBMITTED}
+        if any(i.status in unresolved for i in self.store.active(self.binding)):
+            why.append("ORDERS_UNRESOLVED")
+        if why:
+            return False, why
+        self.operator_halt = None
+        self.store.event(self.binding, now, "operator_resume")
+        return True, []
+
+    def cancel_pending(self, now: pd.Timestamp, reason: str = "OPERATOR_CANCEL") -> int:
+        """Cancel entry orders that have not filled. Held positions are not touched."""
+        n = 0
+        for i in self.store.active(self.binding):
+            if i.purpose is Purpose.ENTRY:
+                self.orders.abandon_entry(now, i.candidate_id, reason)
+                n += 1
+        return n
+
+    def close_position(self, now: pd.Timestamp, symbol: str) -> bool:
+        if self.orders.position(symbol) <= 0:
+            return False
+        self._exit(now, self._candidate_of(symbol), symbol, "OPERATOR_CLOSE")
+        return True
+
+    def flatten(self, now: pd.Timestamp, reason: str = "OPERATOR_FLATTEN") -> dict:
+        cancelled = self.cancel_pending(now, reason)
+        closed = []
+        for symbol, qty in self.store.filled_by_symbol(self.binding).items():
+            if qty > 0:
+                self._exit(now, self._candidate_of(symbol), symbol, reason)
+                closed.append(symbol)
+        self.operator_halt = reason
+        self.store.event(self.binding, now, "operator_flatten", cancelled=cancelled, closed=closed)
+        return {"cancelled_entries": cancelled, "exits_placed": closed}
 
     # ---- the strategy's reference exit (D-33, D-34) -----------------------------------------
     def on_reference_exit(self, now: pd.Timestamp, candidate_id: str, reason: str) -> None:

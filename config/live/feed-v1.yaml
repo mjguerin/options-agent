@@ -15,6 +15,9 @@ shutdown_grace_s: 1         # keep running this long after close + finalize dela
 synthetic_session_lead_min: 1  # the test feed's session starts this many minutes ahead
 spot_feed: sip              # feed for the latest SPY price at startup
 
+controls:
+  enabled: true                      # publish state and apply operator commands (config/api)
+
 alerts:
   enabled: true                      # write incidents and heartbeats (config/alerts)
 

@@ -279,6 +279,38 @@ def _alerts_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _api_run(args: argparse.Namespace) -> int:
+    import logging
+
+    import uvicorn
+
+    from tournament.alerts.config import load_alerts_config
+    from tournament.alerts.store import AlertStore
+    from tournament.api.app import create_app
+    from tournament.api.config import load_api_config
+    from tournament.api.store import ControlStore
+    from tournament.orders.store import default_engine
+    from tournament.secrets import load_api_tokens
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    try:
+        tokens = load_api_tokens()
+    except (MissingCredentialsError, InsecureEnvFileError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    cfg = load_api_config()
+    engine = default_engine()
+    app = create_app(
+        ControlStore(engine),
+        cfg,
+        tokens,
+        REPO_ROOT / cfg.state.file,
+        AlertStore(engine, load_alerts_config()),
+    )
+    uvicorn.run(app, host=cfg.server.host, port=cfg.server.port, log_level="info")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tournament")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -357,6 +389,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="don't collect OPRA option quotes",
     )
     run.set_defaults(func=_feed_run)
+
+    api = sub.add_parser("api", help="the control API (loopback only)")
+    api_sub = api.add_subparsers(dest="api_command", required=True)
+    api_sub.add_parser("run", help="serve the API").set_defaults(func=_api_run)
 
     al = sub.add_parser("alerts", help="the Telegram alert bot")
     al_sub = al.add_subparsers(dest="alerts_command", required=True)
