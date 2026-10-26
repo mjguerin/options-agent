@@ -1,6 +1,6 @@
 # VPC: VWAP pullback continuation (BRD 6.2)
 
-Status: **DRAFT v0.4, not approved.** Bullish shown. Bearish is the exact mirror image:
+Status: **APPROVED v1 (owner, 2026-10-25), tag `specs-v1`.** Bullish shown. Bearish is the exact mirror image:
 TREND_DOWN, swing lows ↔ swing highs, above ↔ below, max ↔ min. All thresholds use `A_setup`
 unless stated otherwise.
 

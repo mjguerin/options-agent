@@ -1,6 +1,6 @@
-# VPC: VWAP pullback continuation (specs/strategies/vpc.md v0.4). DRAFT parameters.
+# VPC: VWAP pullback continuation (specs/strategies/vpc.md, specs-v1). Approved parameters.
 strategy_id: vpc
-version: vpc-v1-draft
+version: vpc-v1
 required_features: [atr_current, disp_30_atr, regime, rvol]
 params:
   first_slot: 31

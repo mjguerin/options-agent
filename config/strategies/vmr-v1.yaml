@@ -1,6 +1,6 @@
-# VMR: VWAP mean reversion (specs/strategies/vmr.md v0.4). DRAFT parameters.
+# VMR: VWAP mean reversion (specs/strategies/vmr.md, specs-v1). Approved parameters.
 strategy_id: vmr
-version: vmr-v1-draft
+version: vmr-v1
 required_features: [atr_current, regime]
 params:
   first_slot: 60

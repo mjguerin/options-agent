@@ -1,6 +1,6 @@
 # Record schemas (BRD 6.1, 11; MD-02)
 
-Status: **DRAFT v0.4, not approved.** `schema_version = signals-v1` once approved.
+Status: **APPROVED v1 (owner, 2026-10-25), tag `specs-v1`.** `schema_version = signals-v1`.
 
 These are signal and replay records. They are **not** the paper-execution model; separate Step 3
 schemas cover risk reservations, order intents, client and broker order IDs, fills, positions,
@@ -57,7 +57,9 @@ session. Broker and account streams have their own `stream_id`s.
 
 ## S-3 Hashing and canonical form
 
-- Canonical JSON per RFC 8785, after the application rules:
+- Canonical JSON per RFC 8785, after the application rules below. The participating fields,
+  timestamp representation and numeric representation are frozen with v1. Canonical
+  serialization alone doesn't define record identity:
   - Each record type lists the fields that take part.
   - Prices are rounded half-even to 1e-6; ratios to 1e-9.
   - Timestamps are UTC ISO-8601 with nanoseconds and a `Z` suffix.
@@ -67,8 +69,9 @@ session. Broker and account streams have their own `stream_id`s.
 - **Logical keys vs record IDs:**
   - `signal_key` = hash(`strategy_id`, `strategy_version`, `config_hash`, `dataset_id`,
     `session_id`, `setup_ordinal`, trigger `slot`). It's identical across reruns, so runs can be
-    compared.
-  - `candidate_id` = hash(`run_id`, `signal_key`). It's unique per run.
+    compared. It's the logical signal identity.
+  - `candidate_id` = hash(`run_id`, `signal_key`). It's the candidate occurrence within its
+    experiment or run context, unique per run.
 
 ## S-4 FeatureSnapshot
 

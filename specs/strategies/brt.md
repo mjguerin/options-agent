@@ -1,6 +1,6 @@
 # BRT: Break-and-retest continuation (BRD 6.4)
 
-Status: **DRAFT v0.4, not approved.** Bullish shown (an upside break of a zone's `zone_high`, E);
+Status: **APPROVED v1 (owner, 2026-10-25), tag `specs-v1`.** Bullish shown (an upside break of a zone's `zone_high`, E);
 bearish mirrors it on `zone_low`. Thresholds use `A_setup` = A_cur at the break slot.
 
 **Hypothesis.** When a known level breaks and then holds on a retest, it tends to act as support

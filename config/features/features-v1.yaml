@@ -1,8 +1,8 @@
-# Shared feature parameters (specs/shared.md SD-04 to SD-09, SD-14). DRAFT: these become
-# features-v1 when the specs are approved. Changing any value is a new feature version (FR-09).
+# Shared feature parameters (specs/shared.md SD-04 to SD-09, SD-14). Approved as
+# features-v1 with specs-v1. Changing any value is a new feature version (FR-09).
 
-feature_version: features-v1-draft
-spec_version: specs-v0.4
+feature_version: features-v1
+spec_version: specs-v1
 
 atr:            # SD-05
   period: 14

@@ -1,6 +1,6 @@
 # Shared definitions (MD-02 to MD-07, BRD 6.1)
 
-Status: **DRAFT v0.4, not approved.** Feature version `features-v1` once approved. Every strategy
+Status: **APPROVED v1 (owner, 2026-10-25), tag `specs-v1`.** Feature version `features-v1`. Every strategy
 uses these definitions as written and may not redefine them. Parameter names in `code font` live in
 versioned configuration (SD-14). Decision IDs (D-nn) refer to [decisions.md](decisions.md).
 
@@ -81,9 +81,28 @@ assumes every trade of slot m arrived by `finalized_at(m)`. Replay results are l
   with its dataset ID.
 - Stored in UTC; the exchange-local schedule is derived from it. Every rule written as "close − X"
   is relative to the session's own close, so it shifts on early closes.
-- If the calendar is missing, or disagrees with observed trading (for example, trades on a
-  calendar holiday), the session is marked `calendar_inconsistent`. No strategy evaluates it, and
-  an incident is recorded.
+- **Entry eligibility is separate from managing existing exposure.** If the calendar is missing or
+  a material contradiction is detected, the session is flagged `calendar_inconsistent` and **new
+  entries are disabled** for every strategy (`entry_data_eligible` is false). Existing reference
+  and broker positions stay under contingency management, monitoring and liquidation controls
+  (SD-10, SD-11). An incident is recorded.
+- **Material contradiction** (any one of):
+  1. No calendar entry can be loaded for a day the engine is asked to run, or its open or close is
+     missing.
+  2. On a calendar session, no regular-hours price-eligible SPY trade (`upd_oc`) in the first 15
+     scheduled minutes while the feed is connected and no halt is in force.
+  3. More than 10 regular-hours price-eligible SPY trades after `scheduled close + 5 min`, which
+     suggests a wrong early close.
+  4. Regular-hours price-eligible SPY trades between 09:30 and 16:00 ET on a weekday the calendar
+     marks closed (found by the after-close check, since the engine doesn't start on such days).
+
+  Extended-hours prints alone (Form T `T`/`U`, pre-market, after-hours) are **not** a
+  contradiction.
+- **Mid-session discovery:** earlier records stay as emitted. New entries are disabled from the
+  moment of discovery, and the affected experiment period is flagged. Nothing is erased, and the
+  records never imply the strategies didn't run.
+- Replay uses the stored historical calendar; checks 2–4 are live checks (Step 3 feed handler and
+  after-close job). That's a declared approximation for replay.
 
 ## SD-03 Trade eligibility and bar construction
 
@@ -101,14 +120,17 @@ specified in the next subsection. The draft deliverable is in [eligibility.md](e
 - **Multiple conditions** combine as the applicable source rules and footnotes say. No universal
   shortcut is assumed. The matrix records the combination rule; where the sources are silent, the
   application rule must be stated explicitly and approved.
-- **Unknown condition** (D-36): the trade is quarantined (excluded from every field), and:
+- **Unknown or unresolved condition** (D-36): an unknown condition code, an invalid condition
+  combination, or a rule that's unresolved without an approved scoped override (E-5). The trade
+  is quarantined (excluded from every field), and:
   - **Scope:** the affected symbol and slot become `DATA_MISSING_OR_UNCERTAIN`. SPY is shared
     input, so all five workers are affected. Entries are blocked and setups in progress are
     cancelled.
   - **Recovery:** a later clean slot doesn't resurrect cancelled setups; new setups form normally.
   - **Late discovery:** if the unknown condition arrives after its slot was finalized, earlier
     decisions stand. The record notes when the uncertainty became known, and the guard and
-    cancellation apply from that discovery onward, never retroactively.
+    cancellation apply from that discovery onward, never retroactively. The affected historical
+    slot is recorded separately.
   - **Positions keep being managed:** reference positions and option positions continue under
     their missing-data contingency and scheduled deadlines (SD-11). The guard never disables exits.
   - **Monitoring:** unknown codes, affected slots, setup cancellations and late discoveries are
@@ -146,8 +168,9 @@ Until D-04 is approved, bar construction is not frozen and `features-v1` cannot 
   `upd_hl` trade; volume is the sum of `upd_vol` sizes; notional is Σ price × size over
   `upd_vwap` trades.
 - **Empty slot:** no trade at all. The bar is `null`.
-- **Volume-only slot:** volume or notional exists, but there is no price-eligible trade. Price fields
-  are `null`; they are never forward-filled.
+- **Volume-only slot:** volume exists, but there is no price-eligible trade. OHLC is `null`, never
+  price-forward-filled. Valid volume and VWAP contributions stay represented separately, by their
+  own eligibility flags.
 - In either case the slot gets the flag `no_price`. Its `interval_status` is never `PRESENT`
   (SD-01), so entries are blocked. VWAP and volume state still update.
 
@@ -171,13 +194,19 @@ doesn't count as proof.
 - The snapshot persists `vwap_notional`, `vwap_volume` and `total_volume`. `total_volume` uses the
   `upd_vol` population (odd lots included), a **different** population. So session VWAP is never
   rebuilt by weighting minute VWAPs with bar volume.
-- VWAP is cumulative, so it carries forward unchanged through a `KNOWN_NO_ELIGIBLE_TRADES` slot,
-  once its denominator is positive. A `DATA_MISSING_OR_UNCERTAIN` slot is different: VWAP after it
+- **Before the first eligible contribution**, VWAP is undefined (not ready).
+- Numerator and denominator accumulate only VWAP-eligible notional and size, independently of
+  total bar volume. Once initialized, VWAP stays unchanged through a known interval with no
+  eligible VWAP contribution. That includes a minute that contains only trades excluded from VWAP,
+  not just a completely empty minute. A `DATA_MISSING_OR_UNCERTAIN` slot is different: VWAP after it
   is flagged `vwap_uncertain` for the rest of the session. An unknown gap is never converted into
   a valid unchanged value. `vwap_uncertain` makes VWAP and everything built on it (`disp_30_atr`,
   regime, VMR's d) **not ready**. So only strategies that use VWAP stop (VPC, FBR, VMR); ORB and
-  BRT are unaffected. Restoring VWAP by backfilling the missed trades from the historical API is a
-  possible later, versioned addition.
+  BRT are unaffected. A later clean minute alone never clears the uncertainty, because cumulative
+  contributions may be missing. Recovery needs reconciliation or backfill under an approved
+  policy, which is a possible later, versioned addition.
+- Valid late contributions update the cumulative state forward from the next finalized slot; prior
+  decision snapshots are never rewritten.
 - Displacement is indexed by scheduled time: VWAP at the end of slot m against VWAP at the end of
   slot m − 30.
 - **VWAP displacement**:
@@ -309,17 +338,17 @@ Classification, first match wins:
 |---|---|
 | Global floor | **No strategy may emit a candidate before 09:45 ET** (decision on slot 15 at the earliest), and every strategy must also satisfy its own window and feature readiness (D-08). Slot 15 is the **last** opening-range bar, not a bar after the range; the first bar wholly after the OR is slot 16 (09:45–09:46) |
 | Setups before the floor | No strategy starts a setup before slot 15. Shared levels and indicators accumulate from the open. An event that happened before the floor never becomes eligible just because the clock reaches 09:45 |
-| Last candidate | The slot whose `bar_end` = close − `last_entry_min` (30): slot 360 on a full day. A strategy's own `last_entry_slot` is capped by this on early closes |
+| Last candidate | The slot whose `bar_end` = close − `last_entry_min` (30): slot 360 on a full day. The boundary is inclusive: a signal bar ending exactly at close − 30 is permitted, subject to the normal finalization and submission checks. A strategy's own `last_entry_slot` is capped by this on early closes |
 | Cancel unfilled entry orders | At the later of each candidate's expiry and the last-candidate deadline (Step 3 execution) |
 | Liquidation start (session cutoff) | Decision on the slot whose `bar_end` = close − `cutoff_min` (10): slot 380. Every open position exits with reason SESSION_CUTOFF |
-| Desired flat | close − 5 min. Anything still open is an incident with an operator alert (Step 3) |
+| Desired flat | close − 5 min. Anything still open is an incident with an operator alert (Step 3). The incident doesn't end liquidation attempts or position monitoring |
 
 **Strategy-layer guards** (they decide strategy state):
 
 | Guard | Scope | What it blocks |
 |---|---|---|
 | `underlying_feature_ready` | The features a strategy needs | New setups and candidates for that strategy |
-| `entry_data_eligible` | This slot: `interval_status` = `PRESENT`, no `calendar_inconsistent` | New setups and candidates for all strategies this slot. Setups in progress follow SD-01 |
+| `entry_data_eligible` | This slot: `interval_status` = `PRESENT`, no `calendar_inconsistent` (from its detection onward) | New setups and candidates for all strategies this slot. Setups in progress follow SD-01 |
 
 **Execution-layer guards** (Step 3). They block **submissions only** and never change strategy
 state:
@@ -358,8 +387,9 @@ state:
   exited.** A candidate's lifetime never permits buying an option for a thesis the strategy model
   considers finished.
 
-**Quotas** are consumed when a candidate is **emitted**. Execution rejection doesn't refund the
-quota and doesn't create a new candidate; retries reuse the same candidate ID.
+**Quotas** are consumed when a candidate is **emitted**. Broker rejection, contract-selection
+rejection or no fill doesn't refund the quota and doesn't create a new candidate; retries reuse the
+same candidate ID. An evaluation that expires without emitting a candidate consumes no quota.
 
 ## SD-11 Reference positions and exits
 
@@ -401,11 +431,19 @@ finalized slots (bullish shown; bearish is the mirror image):
 | INVALIDATION | close ≤ `invalidation_level` |
 | TARGET | close ≥ `target_price` |
 | TRAIL | Trailing is active and close ≤ `trail_stop` |
-| FOLLOW_THROUGH | At slot e + `ft_bars`, no close in e + 1 … e + `ft_bars` (that slot included) reached entry + `ft_r` × `r_u` |
+| FOLLOW_THROUGH | At slot e + `ft_bars`, no close in e + 1 … e + `ft_bars` (that slot included) reached entry + `ft_r` × `r_u`. The deadline slot is checked for the milestone before failure is declared; a missing deadline close can't establish progress |
 | STAGNATION | `stag_bars` consecutive slots without a new highest close since entry |
 | MAX_HOLD | Slot = e + `max_hold` |
 
-- **Close-based only.** "Reaches +0.5R" means a close ≥ entry + 0.5 `r_u`; a wick doesn't count.
+- **Close-based only (D-16).** Underlying milestones, targets, invalidation, trailing-stop breaches
+  and favourable-progress measurements use completed-bar closes, not intrabar touches. "Reaches
+  +0.5R" means a close ≥ entry + 0.5 `r_u`; a wick doesn't count. This doesn't change the setup
+  rules that are explicitly wick-based (VPC's pre-entry undercut, BRT's retest wick cap). Session
+  deadlines, execution safety controls and option-premium stops keep their own cadence.
+- **Clocks.** Every hold and exit clock (FOLLOW_THROUGH, STAGNATION, MAX_HOLD) counts scheduled
+  session minutes from `signal_bar_end`, slot e being the signal slot and `reference_entry_price`
+  its close. Option fill timing never starts or resets a clock (D-28). Missing inputs can prevent
+  a price-based decision, but they never pause a scheduled timer (D-29).
 - **Without a close** (any non-`PRESENT` slot), INVALIDATION, TARGET and TRAIL can't fire and
   can't be inferred. Scheduled exits still do (SESSION_CUTOFF, FOLLOW_THROUGH, STAGNATION,
   MAX_HOLD); FOLLOW_THROUGH and STAGNATION use the closes that exist.

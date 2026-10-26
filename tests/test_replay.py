@@ -258,6 +258,14 @@ def test_follow_through_final_slot_counts():  # SH-35
     assert q.evaluate(103, row(103, 500.4), 380) and q.primary_reason == "FOLLOW_THROUGH"
 
 
+def test_follow_through_missing_deadline_close_fails():  # D-21: a gap can't establish progress
+    p = ref(spec(timers={"ft_bars": 3, "ft_r": 0.5}))
+    for s, c in ((101, 500.1), (102, 500.2)):
+        assert not p.evaluate(s, row(s, c), 380)
+    assert p.evaluate(103, row(103, None, DATA_MISSING_OR_UNCERTAIN), 380)
+    assert p.primary_reason == "FOLLOW_THROUGH" and p.exit_price_stale
+
+
 def test_stagnation_counts_slots_without_new_best_close():
     p = ref(spec(timers={"stag_bars": 3}))
     p.evaluate(101, row(101, 500.3), 380)  # new best

@@ -1,6 +1,6 @@
 # FBR: Failed-breakout reversal (BRD 6.5)
 
-Status: **DRAFT v0.4, not approved.** Bearish shown (a failed upside excursion through a zone's
+Status: **APPROVED v1 (owner, 2026-10-25), tag `specs-v1`.** Bearish shown (a failed upside excursion through a zone's
 `zone_high`, E); bullish mirrors it on `zone_low`. Thresholds use `A_setup` = A_cur at the first
 excursion slot.
 

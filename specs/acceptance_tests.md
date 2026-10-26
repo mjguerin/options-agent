@@ -50,6 +50,7 @@ results are exact: outcome, reason code, and the candidate's fields where one is
 | SH-33 | Halt covering slots 80–85 with a reference position open | Status HALTED; setups are cancelled. INVALIDATION and TARGET can't fire without closes; MAX_HOLD still fires on schedule |
 | SH-34 | MAX_HOLD lands on a slot with no close | Exit with `reference_exit_price` = last valid close, flagged `stale_reference_price` |
 | SH-35 | Follow-through progress first reached on the deadline slot e + `ft_bars` | No FOLLOW_THROUGH exit, because the final slot is evaluated before failure |
+| SH-35b | No progress before the deadline, and the deadline slot has no close (D-21) | FOLLOW_THROUGH exit at e + `ft_bars`, price flagged `stale_reference_price`: a missing close can't establish progress |
 | SH-36 | `finalize_delay` and a late emission | Deadlines are still `signal_bar_end` + n minutes, with no shift |
 | SH-37 | Candidate emitted, option entry rejected by execution | Reference position opens and runs; cooldown and quota are as if it traded; a rejection record is written |
 | SH-38 | Reference exits on slot j while the option order is still unfilled | Execution cancels the entry; a late fill is exited immediately and logged. Strategy cooldown starts from j |
@@ -109,7 +110,7 @@ ORH = 500.00, ORL = 494.00, W = 6 (`W_A` = 6).
 | ORB-X1 | `W_A` = 2.5 at slot 15; ATR later halves | INELIGIBLE all day (`OR_TOO_NARROW`), unchanged by the ATR change |
 | ORB-X2 | A crossing with rvol 1.2, then the next bar at rvol 2.0 still above the threshold | No candidate. Not a new crossing, and late confirmation isn't allowed |
 | ORB-X3 | A zero-range bar above the threshold (on a crossing) | Confirmation fails |
-| ORB-X4 | Follow-through: entry 500.40, `r_u` 1.90; no close ≥ 501.35 within 10 slots | Exit FOLLOW_THROUGH at e + 10, even if ORH + 0.25 W was exceeded at entry |
+| ORB-X4 | Follow-through: entry 500.40, `r_u` 1.90; no close ≥ 501.35 within 10 slots | Exit FOLLOW_THROUGH at e + 10 (e = signal slot; fill timing irrelevant), even if ORH + 0.25 W was exceeded at the signal |
 
 ## BRT
 

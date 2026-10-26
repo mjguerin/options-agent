@@ -1,8 +1,8 @@
 # D-04 (C) Minute-bar adapter: how SIP eligibility (cts_sale_conditions.csv + notes.yaml) maps
 # to our SD-03 bar flags. These are APPLICATION policies. Owner decisions are recorded per flag
-# (owner review of 2026-10-24). DRAFT: conditionally approved in principle; not frozen.
+# (owner review of 2026-10-24). Approved and frozen with specs-v1.
 
-version: adapter-v1-draft2
+version: adapter-v1
 matrix: cts_sale_conditions.csv
 notes: notes.yaml
 effective_interval_convention: "effective_from inclusive, effective_to exclusive"

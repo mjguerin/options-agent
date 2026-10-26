@@ -1,6 +1,6 @@
 # D-04 (B) Conditional notes and combination rules, transcribed from CTS-2.11b pp. 83-85.
 # The matrix (cts_sale_conditions.csv) refers to these IDs. Rules stay conditional; they are
-# never flattened to booleans. DRAFT, not approved.
+# never flattened to booleans. Approved with specs-v1.
 
 scope:
   evaluated: consolidated columns only (consolidated_last_rule, consolidated_high_low_rule, volume_rule)

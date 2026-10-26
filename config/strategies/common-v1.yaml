@@ -1,8 +1,8 @@
-# Common session rules for every strategy (specs/shared.md SD-01, SD-10, SD-11). DRAFT until
-# the specs are approved. Changing a value creates a new version and evaluation segment (FR-09).
+# Common session rules for every strategy (specs/shared.md SD-01, SD-10, SD-11). Approved
+# with specs-v1. Changing a value creates a new version and evaluation segment (FR-09).
 
-version: common-v1-draft
-spec_version: specs-v0.4
+version: common-v1
+spec_version: specs-v1
 
 clock:
   finalize_delay_s: 2              # SD-01, D-03

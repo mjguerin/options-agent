@@ -1,6 +1,6 @@
 # ORB: Opening-range breakout (BRD 6.3)
 
-Status: **DRAFT v0.4, not approved.** Bullish shown; bearish mirrors it on ORL. Thresholds use
+Status: **APPROVED v1 (owner, 2026-10-25), tag `specs-v1`.** Bullish shown; bearish mirrors it on ORL. Thresholds use
 `A_OR` = A_cur(15), frozen for the day.
 
 **Hypothesis.** A first close out of the 15-minute opening range, on unusual volume, tends to
@@ -38,7 +38,7 @@ continue. It's a research hypothesis, not a known edge.
 | Field | Value |
 |---|---|
 | `entry_reference` | close(t) |
-| `invalidation_level` | ORH − `inv_frac` × W. A close at or below it exits. This is also the R level; the separate 0.1 A planned stop from v0.1 is removed |
+| `invalidation_level` | ORH − `inv_frac` × W. A close at or below it exits. This initial invalidation level defines `r_u`; the separate 0.1 A planned-stop buffer from v0.1 is removed. A close-based invalidation threshold isn't a guaranteed execution price or loss cap |
 | `r_u` | entry − invalidation |
 | `target` | Fixed level ORH + `tgt_mult` × W |
 | Room check | Requires `r_u` > 0, target > entry (`TARGET_EXHAUSTED` otherwise), and remaining reward/risk `RR_remaining = (target − entry) / r_u` ≥ `rr_min` = 1.0, measured at the signal close (`RR_TOO_LOW` otherwise). The denominator is the single approved initial risk, to the invalidation level (D-22). The target is never moved to rescue a rejected entry (D-12) |
@@ -46,9 +46,15 @@ continue. It's a research hypothesis, not a known edge.
 
 ## Exits (SD-11)
 
-INVALIDATION; TARGET; TRAIL; FOLLOW_THROUGH: a close ≥ entry + `ft_r` × `r_u` within `ft_bars`.
-That's post-entry progress, replacing v0.1's "ORH + 0.25 W", which could already be satisfied at
-entry. Then MAX_HOLD.
+INVALIDATION; TARGET; TRAIL; FOLLOW_THROUGH; then MAX_HOLD.
+
+**FOLLOW_THROUGH (D-21):** ORB must make favourable close-based progress of at least
+`ft_r` × initial `r_u` (0.5) from `reference_entry_price`, within `ft_bars` (10) scheduled session
+minutes after `signal_bar_end`. `reference_entry_price` is the signal-bar close. Actual option fill
+timing doesn't start or reset this clock. At the deadline evaluation the milestone is checked
+before failure is declared. A missing deadline close can't establish progress, so if no earlier
+eligible close met the milestone, the deadline fails. This replaces v0.1's "ORH + 0.25 W", which
+could already be satisfied at the signal.
 
 ## Quotas
 

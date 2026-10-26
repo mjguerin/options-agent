@@ -1,7 +1,7 @@
 # Trade eligibility (D-04 deliverable)
 
-Status: **DRAFT 2. Conditionally approved in principle by the owner (2026-10-24); not frozen.**
-`features-v1` stays blocked until the freeze checklist at the end is complete. Scope: SPY (tape B,
+Status: **APPROVED and frozen (owner, 2026-10-25), adapter `adapter-v1`, tag `specs-v1`.** The
+freeze checklist at the end is complete. Scope: SPY (tape B,
 CTS).
 
 | Part | Where |
@@ -230,8 +230,11 @@ output in `data/reports/d04_full_history.json`). Tolerances: 1e-6 for prices, vo
        Building PMH and PML under the adapter is part of the bar-builder code
 8. [x] Full-history report: all 684 sessions, stated tolerances, evidence-status categories
        (below)
-9. [ ] Provenance: OPEN-SRC-1 to 4 resolved where possible (CTS 2.9g; an edition before 2.10a;
-       go-live dates; the CTS lifecycle for `M`, `Q` and `9`)
+9. [x] Provenance: OPEN-SRC-1 to 4 resolved where possible (CTS 2.9g; an edition before 2.10a;
+       go-live dates; the CTS lifecycle for `M`, `Q` and `9`). Closed by owner decision
+       2026-10-25, option (b): v1 is frozen with the gaps documented below. The `O` and `N`
+       assumptions (E-5) stay development-only. Both end before 2024-05-28, inside the
+       development partition (D-02), so no held-out session depends on them
 
 ## Open source gaps
 

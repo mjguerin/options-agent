@@ -4,16 +4,18 @@ The other two gate conditions, no look-ahead and traceability, are evidenced by 
 (`research/replay/step2_gate.py`). This list is what the owner decides before the specs are
 frozen as `specs-v1`. Nothing here asks for parameter tuning: every number stays as written.
 
-## 1. Owner decisions still open
+## 1. Owner decisions
 
 | # | Item | Options |
 |---|---|---|
-| 1 | **D-02 data partition dates** | Set `historical_development` and `historical_holdout`. Behaviour has been inspected only for Feb–Apr 2024 (access log #8 and #17); every later period is integrity-only |
-| 2 | **D-04 freeze item 9 (OPEN-SRC-1 to 4)** | (a) Obtain the older CTS editions and lifecycle text, then close the gaps. (b) Freeze v1 with the gaps documented: the `O` and `N` assumptions stay development-only, so the held-out report must disclose them (E-5) |
+| 1 | **D-02 data partition dates** | **Decided 2026-10-25:** development 2024-02-01 to 2024-12-31; held-out 2025-01-02 to 2026-10-22 |
+| 2 | **D-04 freeze item 9 (OPEN-SRC-1 to 4)** | **Decided 2026-10-25:** option (b), freeze with the gaps documented; `O`/`N` assumptions are development-only and fall inside the development partition |
+| 3 | **PROPOSED items from the owner's review** (D-07, D-09, D-10, D-16, D-21, D-22, D-23, D-25, D-27, D-28, D-29) | **Decided 2026-10-25:** all confirmed; D-21 reworded as signal-anchored. Clarifications are written into the specs |
+| 4 | **D-46 detail: calendar contradiction tests** (SD-02) | **Decided 2026-10-25:** approved as drafted |
 
-## 2. Drafter choices awaiting explicit approval
+## 2. Drafter choices: approved
 
-Each is in [decisions.md](decisions.md) with its rationale.
+The owner approved all of these on 2026-10-25, and they're marked AGREED in [decisions.md](decisions.md).
 
 | ID | Choice |
 |---|---|
@@ -32,7 +34,7 @@ Each is in [decisions.md](decisions.md) with its rationale.
 | D-43 | BRT/FBR edge identity across zone versions |
 | D-44 | VPC replacement depth test uses the new `A_setup` |
 
-## 3. Shared definitions to approve (project plan Step 2)
+## 3. Shared definitions (project plan Step 2): approved 2026-10-25 with the owner's wording (D-46, D-47)
 
 - **Bars:** SD-03 together with the D-04 matrix and adapter (E-1, E-2, E-3, E-7).
 - **VWAP:** last-eligible session VWAP, E-4(a).

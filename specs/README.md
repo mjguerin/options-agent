@@ -1,11 +1,12 @@
 # Strategy specifications (D05)
 
-Status: **DRAFT v0.4, not approved.** It revises v0.1 using the owner's consolidated review, v0.2
+Status: **APPROVED v1 (owner, 2026-10-25), tag `specs-v1`.** Approved from v0.4 with the owner's
+approval edits (CHANGELOG). v0.4 revised v0.1 using the owner's consolidated review, v0.2
 using the owner's response to the drafter's challenges, and v0.3 using the owner's provisional
 decisions on the remaining open items. Those decisions are draft implementation defaults: they get
 frozen before the paper tournament, after the development correctness checks, and they are not
 optimized parameters.
-Recommendations that come from the review are proposals until the owner approves them. None of
+Any behavioural change from here is a new version and evaluation segment (FR-09). None of
 the five strategies is known to be profitable; all are research hypotheses, and "none is ready"
 is a valid tournament result.
 
@@ -82,7 +83,9 @@ Full-session summaries describe the data. They never feed intraday decisions.
 
 ## Data partitions (D-02)
 
-Agreed in principle (D-02). Dates are still the owner's.
+Agreed (D-02). Dates set by the owner on 2026-10-25: development is calendar 2024, and held-out
+is 2025 onward to the end of the download (231 and 453 sessions). Behaviour has been inspected only inside development
+(access log #8, #17, #18).
 
 | Data or process | Purpose |
 |---|---|
@@ -108,8 +111,8 @@ version.
 
 ```yaml
 data_partitions:
-  historical_development: {start: REQUIRED, end: REQUIRED}
-  historical_holdout:     {start: REQUIRED, end: REQUIRED}
+  historical_development: {start: 2024-02-01, end: 2024-12-31}
+  historical_holdout:     {start: 2025-01-02, end: 2026-10-22}
   paper_selection:        {start: set at Phase 3 activation}
   paper_confirmation:     {start: set at Phase 5 activation}
 research_access_log: specs/research_access_log.md

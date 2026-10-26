@@ -75,7 +75,7 @@ def test_x3_zero_range_bar_fails_confirmation():
     assert run(ORB(), df, lv).candidates.empty
 
 
-def test_x4_follow_through_is_post_entry():
+def test_x4_follow_through_is_signal_anchored():
     df, lv = base()
     breakout(df)
     for s in range(21, 31):

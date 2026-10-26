@@ -1,6 +1,6 @@
-# FBR: failed-breakout reversal (specs/strategies/fbr.md v0.4). DRAFT parameters.
+# FBR: failed-breakout reversal (specs/strategies/fbr.md, specs-v1). Approved parameters.
 strategy_id: fbr
-version: fbr-v1-draft
+version: fbr-v1
 required_features: [atr_current, disp_30_atr, zone_version]
 params:
   first_slot: 31

@@ -1,5 +1,20 @@
 # Specs changelog
 
+## v1 approval edits (Oct 25, 2026)
+
+Owner decisions on the approval checklist; no parameter changes.
+- Drafter choices D-13 to D-15, D-24, D-26, D-32, D-37/D-38 details and D-39 to D-44 approved.
+- D-02 dates: development 2024-02-01 to 2024-12-31, held-out 2025-01-02 to 2026-10-22.
+- D-04 item 9 closed by option (b): v1 frozen with the source gaps documented.
+- PROPOSED items D-07, D-09, D-10, D-16, D-22, D-23, D-25, D-27 to D-29 confirmed, with the owner's
+  clarifications written into SD-10, SD-11, S-3 and orb.md.
+- D-21 reworded: ORB follow-through is signal-anchored (from `reference_entry_price` and
+  `signal_bar_end`), not "post-entry". The implementation already worked this way; acceptance
+  scenario SH-35b added.
+- SD-02 (D-46): a calendar problem disables new entries but never position management; the
+  contradiction tests are defined. SD-03 and SD-04 (D-47): uncertainty scope and VWAP wording
+  completed.
+
 ## v0.4 (Oct 23, 2026): owner's provisional decisions on the open items
 
 These are draft implementation defaults, frozen for `v1` after the development correctness

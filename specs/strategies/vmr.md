@@ -1,6 +1,6 @@
 # VMR: VWAP mean reversion (BRD 6.6)
 
-Status: **DRAFT v0.4, not approved.** Bearish shown (price stretched above VWAP); bullish mirrors
+Status: **APPROVED v1 (owner, 2026-10-25), tag `specs-v1`.** Bearish shown (price stretched above VWAP); bullish mirrors
 it. Thresholds use `A_setup` = A_cur at the episode start, except the stretch measure d, which
 uses A_cur of the slot it's computed on.
 
