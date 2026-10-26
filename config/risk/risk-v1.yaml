@@ -20,6 +20,11 @@ sizing:                              # CS-05
 premium_stop:                        # EX-02; execution-only (D-31): never changes strategy state
   loss_pct: 0.20                     # exit when the bid falls this far below the entry price
 
+limits:                              # RK-01, RK-03: account-level caps, checked atomically
+  max_open_positions: 1              # positions held or pending at once (one per account, D-17)
+  max_open_premium_pct: 0.20         # of the equity basis: premium held plus pending orders
+  reservation_ttl_s: 60              # a claim that never became an order is released after this
+
 daily_loss:                          # RK-01, D07
   limit_usd: 500
   measure: realized_plus_open_at_bid # realized_only | realized_plus_open_at_bid

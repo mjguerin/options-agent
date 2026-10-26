@@ -127,6 +127,7 @@ def _feed_run(args: argparse.Namespace) -> int:
     from tournament.adapters.alpaca import data_account_alias
     from tournament.adapters.alpaca_history import AlpacaHistory
     from tournament.live.runner import (
+        PreflightFailed,
         load_feed_config,
         run_session,
         synthetic_session,
@@ -154,12 +155,44 @@ def _feed_run(args: argparse.Namespace) -> int:
         from tournament.marketdata.store import HistoryStore
 
         store = HistoryStore(_history_root()) if args.decisions else None
-        s = run_session(day, mode, creds, out_root, store, options=args.options)
-    except (FeedGuardError, FatalStreamError) as exc:
+        manifest = None
+        if args.manifest:
+            from tournament.accounts.manifest import load_manifest
+
+            manifest = load_manifest(args.manifest)
+        s = run_session(day, mode, creds, out_root, store, options=args.options, manifest=manifest)
+    except (FeedGuardError, FatalStreamError, PreflightFailed) as exc:
         print(f"Feed stopped: {exc}", file=sys.stderr)
         return 1
     print(f"{mode}: {s.builder.finalized} slots, {s.counts['trades']} trades; see {out_root}")
     return 0
+
+
+def _experiment_draft(args: argparse.Namespace) -> int:
+    from tournament.accounts.manifest import ManifestError, draft_manifest, write_manifest
+
+    try:
+        m = draft_manifest(args.id, args.mode, args.tag, args.balance)
+        print(f"wrote {write_manifest(m)}: review it, add the approval, commit and tag it")
+    except (ManifestError, ValueError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    return 0
+
+
+def _experiment_check(args: argparse.Namespace) -> int:
+    from tournament.accounts.manifest import ManifestError, load_manifest, preflight
+
+    try:
+        result = preflight(load_manifest(args.manifest))
+    except ManifestError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    for c in result.checks:
+        flag = "ok  " if c.ok else ("FAIL" if c.blocking else "warn")
+        print(f"  {flag} {c.name:28} {c.detail}")
+    print("preflight PASSED" if result.passed else "preflight FAILED")
+    return 0 if result.passed else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -232,6 +265,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="record the feed only; don't run the five workers",
     )
+    run.add_argument("--manifest", help="run the preflight against this experiment manifest first")
     run.add_argument(
         "--no-options",
         dest="options",
@@ -239,6 +273,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="don't collect OPRA option quotes",
     )
     run.set_defaults(func=_feed_run)
+
+    exp = sub.add_parser("experiment", help="experiment manifests and the startup preflight")
+    exp_sub = exp.add_subparsers(dest="experiment_command", required=True)
+    draft = exp_sub.add_parser("draft", help="write an unapproved manifest for today's configs")
+    draft.add_argument("--id", required=True)
+    draft.add_argument("--mode", choices=["shadow", "paper"], default="shadow")
+    draft.add_argument("--tag", help="git tag of the code; required for paper")
+    draft.add_argument("--balance", type=float, required=True, help="starting balance per account")
+    draft.set_defaults(func=_experiment_draft)
+    check = exp_sub.add_parser("check", help="run the preflight against a manifest")
+    check.add_argument("manifest")
+    check.set_defaults(func=_experiment_check)
     return parser
 
 

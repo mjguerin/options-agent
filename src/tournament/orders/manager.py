@@ -122,6 +122,22 @@ class OrderManager:
         self.store.event(intent.client_order_id, now, "intent", qty=qty, limit=intent.limit_price)
         return self._send(intent, now)
 
+    def abandon_entry(self, now: pd.Timestamp, candidate_id: str, reason: str) -> list[Intent]:
+        """The strategy's reference position has already exited (D-34): an unfilled entry is
+        cancelled and never re-priced. A fill that beats the cancel stays and is exited by the
+        caller."""
+        done = []
+        for i in self.store.chain(self.account, candidate_id, Purpose.ENTRY):
+            if not i.active:
+                continue
+            self.store.event(i.client_order_id, now, "abandon", reason=reason)
+            if i.status in (Status.PENDING_SUBMIT, Status.SUBMITTED, Status.UNCERTAIN):
+                i = self._reconcile(i, now)  # find out what exists before cancelling it
+            if i.active:
+                i = self._cancel(i, now, replace=False)
+            done.append(i)
+        return done
+
     # ---- exits --------------------------------------------------------------------------
     def position(self, symbol: str) -> int:
         return self.store.filled_by_symbol(self.account).get(symbol, 0)
@@ -297,7 +313,7 @@ class OrderManager:
                 return self._cancel(i, now)
         return i
 
-    def _cancel(self, i: Intent, now: pd.Timestamp) -> Intent:
+    def _cancel(self, i: Intent, now: pd.Timestamp, replace: bool = True) -> Intent:
         if i.broker_order_id:
             try:
                 self.broker.cancel(i.broker_order_id)
@@ -313,7 +329,7 @@ class OrderManager:
             if isinstance(found, BrokerOrder):
                 i = self._apply(i, found, now)
             if not i.active:
-                return self._after_cancel(i, now)
+                return self._after_cancel(i, now) if replace else i
             if attempt + 1 < s.cancel_confirm_attempts:
                 self.sleep(s.cancel_confirm_interval_s)
         return i  # unresolved: the next poll asks again

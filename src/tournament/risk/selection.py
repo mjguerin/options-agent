@@ -48,7 +48,9 @@ def select_contract(
 ) -> Selection:
     right = "C" if direction == "bullish" else "P"
     expiration = today + timedelta(days=cfg.expiry_days)
-    chain = contracts[(contracts["expiration"] == expiration) & (contracts["right"] == right)]
+    # the provider names rights "call" and "put"; accept those and the OCC letters
+    letters = contracts["right"].astype(str).str.upper().str[0]
+    chain = contracts[(contracts["expiration"] == expiration) & (letters == right)]
     if chain.empty:
         return Selection(None, right, None, expiration, None, (NO_EXPIRY,))
     chain = chain.sort_values("strike", kind="stable").reset_index(drop=True)

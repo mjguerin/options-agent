@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import subprocess
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -177,6 +177,11 @@ class ReplayRun:
         self._snap: list[dict] = []
         self._sessions: list[str] = []
         self._finalized_at: pd.Timestamp | None = None
+        # Execution follows the strategy layer and never writes back (D-33). These hooks let the
+        # shadow and paper account runtimes observe candidates and reference exits as they are
+        # recorded. Replay leaves them empty.
+        self.on_candidate: list[Callable[[dict], None]] = []
+        self.on_reference_exit: list[Callable[[str, str, str, pd.Timestamp], None]] = []
 
     # ---- public -------------------------------------------------------------------------
     def run_store(
@@ -273,6 +278,11 @@ class ReplayRun:
         if ref_open_at_start and slot > st.ref.entry_slot and st.ref.evaluate(slot, row, cutoff):
             ref = st.ref
             self._ref.append(self._ref_record(w, out, ref))
+            for hook in self.on_reference_exit:
+                when = self._finalized_at or (
+                    pd.Timestamp(row["bar_end"]) + timedelta(seconds=c["clock"]["finalize_delay_s"])
+                )
+                hook(w.strategy_id, ref.candidate_id, ref.primary_reason, when)
             st.cooldown_from, st.cooldown_to = slot + 1, slot + c["session"]["cooldown_slots"]
             event = ReferenceExitEvent(
                 ref.candidate_id,
@@ -462,6 +472,8 @@ class ReplayRun:
             bar_end,
             tuple(c["exit_precedence"]),
         )
+        for hook in self.on_candidate:
+            hook(self._cand[-1])
         return cid
 
     def _transition(

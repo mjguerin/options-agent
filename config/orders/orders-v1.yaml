@@ -42,6 +42,11 @@ submission:
   cancel_confirm_attempts: 3         # lookups to confirm a cancel (a fill can race it)
   cancel_confirm_interval_s: 0.5
 
+simulation:                          # shadow mode only: the modeled broker (BRD 11 modeled execution)
+  fill_delay_s: 1.0                  # an order fills once it is this old and still marketable
+  buy_fill: ask                      # price a marketable buy fills at (price improvement over the limit)
+  sell_fill: bid                     # price a marketable sell fills at
+
 reconciliation:
   quantity_tolerance: 0              # contracts of difference tolerated between us and the broker
   block_entries_on_mismatch: true    # OM-06: unexpected exposure blocks new entries

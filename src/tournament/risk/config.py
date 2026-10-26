@@ -43,6 +43,12 @@ class PremiumStop(_Section):
     loss_pct: float = Field(gt=0, lt=1)
 
 
+class Limits(_Section):
+    max_open_positions: int = Field(ge=1)
+    max_open_premium_pct: float = Field(gt=0, le=1)
+    reservation_ttl_s: float = Field(gt=0)
+
+
 class DailyLoss(_Section):
     limit_usd: float = Field(gt=0)
     measure: Literal["realized_only", "realized_plus_open_at_bid"]
@@ -63,6 +69,7 @@ class RiskConfig(_Section):
     version: str
     sizing: Sizing
     premium_stop: PremiumStop
+    limits: Limits
     daily_loss: DailyLoss
     contract_selection: ContractSelection
 

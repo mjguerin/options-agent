@@ -71,11 +71,13 @@ order_events = Table(
 
 
 def memory_engine() -> Engine:
-    """An in-memory SQLite database with the order tables, for tests."""
+    """An in-memory SQLite database with every table registered so far, for tests."""
+    from tournament.accounts import reservations as _reservations  # noqa: F401
+
     engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
     )
-    metadata.create_all(engine, tables=[orders, order_events])
+    metadata.create_all(engine)
     return engine
 
 
@@ -147,6 +149,15 @@ class IntentStore:
                     orders.c.status.in_([s.value for s in ACTIVE]),
                 )
                 .order_by(orders.c.created_at)
+            ).all()
+        return [self._intent(r) for r in rows]
+
+    def all_for(self, account: str) -> list[Intent]:
+        with self.engine.connect() as c:
+            rows = c.execute(
+                select(orders)
+                .where(orders.c.account_binding == account)
+                .order_by(orders.c.created_at, orders.c.replacement)
             ).all()
         return [self._intent(r) for r in rows]
 

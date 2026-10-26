@@ -30,4 +30,4 @@ def test_required_strategy_outcomes():
 
 def test_alembic_config_loads():
     script = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini")))
-    assert script.get_heads() == ["0001"]  # one linear history, no branches
+    assert script.get_heads() == ["0002"]  # one linear history, no branches

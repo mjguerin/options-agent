@@ -64,6 +64,12 @@ class Submission(_Section):
     cancel_confirm_interval_s: float = Field(ge=0)
 
 
+class Simulation(_Section):
+    fill_delay_s: float = Field(ge=0)
+    buy_fill: Literal["ask", "limit"]
+    sell_fill: Literal["bid", "limit"]
+
+
 class Reconciliation(_Section):
     quantity_tolerance: int = Field(ge=0)
     block_entries_on_mismatch: bool
@@ -76,6 +82,7 @@ class OrdersConfig(_Section):
     entry: Entry
     exit: Exit
     submission: Submission
+    simulation: Simulation
     reconciliation: Reconciliation
 
     @property

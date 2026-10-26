@@ -15,6 +15,11 @@ shutdown_grace_s: 1         # keep running this long after close + finalize dela
 synthetic_session_lead_min: 1  # the test feed's session starts this many minutes ahead
 spot_feed: sip              # feed for the latest SPY price at startup
 
+shadow_accounts:                    # modeled paper accounts in shadow mode (orders/sim.py)
+  enabled: true
+  starting_balance_usd: 10000       # equal for every strategy (FR-06, FR-13)
+  tick_every_s: 1.0                 # how often the position loop runs
+
 # Option quotes (OPRA). D-52 to D-54, DRAFT.
 options:
   feed: opra                 # MD-09: shadow and paper accept only the real-time feed

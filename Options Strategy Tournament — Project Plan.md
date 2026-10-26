@@ -76,10 +76,10 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 
 **Accounts, risk and sizing**
 
-- [ ] Experiment manager: immutable manifest with git tag, $10,000 balances, risk limits (BRD 10.1)
-- [ ] Account runtimes with per-account risk state and order namespace (FR-01, FR-02)
+- [x] Experiment manager: immutable manifest with git tag, $10,000 balances, risk limits (BRD 10.1) (accounts/manifest.py: hashes of every config, `tournament experiment draft|check`, D-63 draft)
+- [x] Account runtimes with per-account risk state and order namespace (FR-01, FR-02) (accounts/runtime.py: own order manager, ledger claim and daily guard per strategy; wrong binding fails closed; D-65)
 - [x] Risk budget -> contract selection -> quantity pipeline (CS-01A, CS-05) (src/tournament/risk: config-driven selection, sizing, daily loss guard and premium stop, 31 tests; wiring into the account runtimes comes with atomic reservation)
-- [ ] Atomic risk reservation, including pending and partial orders (RK-03, FR-07)
+- [x] Atomic risk reservation, including pending and partial orders (RK-03, FR-07) (accounts/reservations.py, migration 0002, race-tested; D-64)
 
 **Orders and exits**
 
@@ -90,7 +90,7 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 
 **Startup and operations**
 
-- [ ] Preflight: clean tree, HEAD at manifest tag, OPRA feed, paper endpoint only (NFR-15, MD-09)
+- [ ] Preflight: clean tree, HEAD at manifest tag, OPRA feed, paper endpoint only (NFR-15, MD-09) (git, tag, approval, config-hash and OPRA checks built and tested; the paper-endpoint and account-identity checks need the paper runtime in Step 4)
 - [ ] Supervisor programs: engine at a fixed pre-market time, API, dashboard, alert bot
 - [ ] FastAPI controls: pause, resume, cancel, close, flatten, emergency (BRD 14)
 - [ ] Streamlit dashboard bound to localhost; reach it through an SSH tunnel

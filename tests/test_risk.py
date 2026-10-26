@@ -134,6 +134,17 @@ def test_nearest_atm_call_for_bullish_and_put_for_bearish():
     assert p.selected and p.symbol == occ(765, "P") and p.right == "P"
 
 
+def test_the_providers_call_and_put_names_work_like_the_occ_letters():
+    live = chain()
+    live["right"] = live["right"].map({"C": "call", "P": "put"})
+    f = feed()
+    view = lambda s: f.view(s, T0 + pd.Timedelta(seconds=1))  # noqa: E731
+    cs = CFG.contract_selection
+    call = select_contract("bullish", 765.3, TODAY, live, view, cs)
+    put = select_contract("bearish", 765.3, TODAY, live, view, cs)
+    assert call.symbol == occ(765, "C") and put.symbol == occ(765, "P")
+
+
 def test_a_tie_between_strikes_goes_to_the_lower_strike():
     assert pick(spot=765.5).symbol == occ(765, "C")
 
