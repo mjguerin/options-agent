@@ -12,10 +12,10 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 UV=/opt/homebrew/bin/uv
 PGBIN=/opt/homebrew/opt/postgresql@18/bin
 cfg() {
-    sudo -u "$OWNER" -H env PATH="/opt/homebrew/bin:$PATH" bash -c "cd '$REPO' && '$UV' run python -c \"
+    sudo -u "$OWNER" -H env PATH="/opt/homebrew/bin:$PATH" bash -c "cd '$REPO' && '$UV' run python -c 'import sys
 from tournament.agent.config import load_agent_config
 c = load_agent_config()
-print($1)\""
+print(eval(sys.argv[1]))' \"\$1\"" _ "$1"
 }
 AGENT="$(cfg 'c.host.os_user')"; ROLE="$(cfg 'c.host.db_role')"; DB="$(cfg 'c.host.database')"
 OWNER_ROLE="$(cfg 'c.host.owner_db_role')"

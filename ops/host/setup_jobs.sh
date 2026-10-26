@@ -13,7 +13,8 @@ OWNER="${SUDO_USER:?run with sudo from the owner account}"
 OWNER_HOME="$(dscl . -read "/Users/$OWNER" NFSHomeDirectory | awk '{print $2}')"
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 UV=/opt/homebrew/bin/uv
-STAGE="$(mktemp -d)"
+STAGE="$(mktemp -d /private/tmp/options-tournament-stage.XXXXXX)"
+chown "$OWNER" "$STAGE"  # the owner renders into it
 step() { printf '\n== %s\n' "$*"; }
 
 step "Time zone: launchd fires on the host's local time"

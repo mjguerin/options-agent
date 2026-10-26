@@ -18,14 +18,15 @@ OWNER_HOME="$(dscl . -read "/Users/$OWNER" NFSHomeDirectory | awk '{print $2}')"
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 UV=/opt/homebrew/bin/uv
 PGBIN=/opt/homebrew/opt/postgresql@18/bin
-STAGE="$(mktemp -d)"
+STAGE="$(mktemp -d /private/tmp/options-tournament-stage.XXXXXX)"
+chown "$OWNER" "$STAGE"  # the owner renders into it
 step() { printf '\n== %s\n' "$*"; }
 as_owner() { sudo -u "$OWNER" -H env PATH="/opt/homebrew/bin:$PGBIN:$PATH" "$@"; }
 cfg() {  # cfg <python expression over c>
-    as_owner bash -c "cd '$REPO' && '$UV' run python -c \"
+    as_owner bash -c "cd '$REPO' && '$UV' run python -c 'import sys
 from tournament.agent.config import load_agent_config
 c = load_agent_config()
-print($1)\""
+print(eval(sys.argv[1]))' \"\$1\"" _ "$1"
 }
 
 AGENT="$(cfg 'c.host.os_user')"
@@ -44,6 +45,17 @@ if dseditgroup -o checkmember -m "$AGENT" admin >/dev/null 2>&1; then
     exit 1
 fi
 echo "  $AGENT: standard user, home $AGENT_HOME"
+
+step "Keep $AGENT out of the owner's home"
+# The home is mode 750 with group staff, and the agent is in staff, so without this it could
+# walk through to the repository, .env and the data. A deny entry for this one account fixes
+# that and changes nothing for anyone else.
+if ls -lde "$OWNER_HOME" | grep -q "user:$AGENT deny"; then
+    echo "  already denied"
+else
+    chmod +a "user:$AGENT deny list,search,read,readattr,readextattr,readsecurity" "$OWNER_HOME"
+    echo "  $AGENT denied on $OWNER_HOME"
+fi
 
 step "Shared folders"
 install -d -o "$OWNER" -g staff -m 755 "$SHARED"

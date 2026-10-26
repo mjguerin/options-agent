@@ -29,7 +29,7 @@ view:                                # what the owner's account copies for the a
   include_dirs: [specs, config, src, tests, ops, migrations, research]
   include_files: ["Options Strategy Tournament — Project Plan.md", README.md, pyproject.toml]
   live_files: ["ledger/*.json", "ops/*.json"]   # under data/live/<day>/<run>/; small result files
-  exclude_names: [.env, .git, __pycache__, .venv, .pytest_cache, .ruff_cache, "*.parquet", "*.pyc"]
+  exclude_names: [.env, .git, .DS_Store, __pycache__, .venv, .pytest_cache, .ruff_cache, "*.parquet", "*.pyc"]
   max_file_mb: 5                     # a larger file is left out, and listed in the manifest
   sessions_back: 10                  # facts are written for this many recent sessions
   secret_scan_min_chars: 8           # a .env value this long found in a published file stops it
