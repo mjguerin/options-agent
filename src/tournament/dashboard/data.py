@@ -202,3 +202,56 @@ class Prepared:
     will_do: str
     positions: dict
     phrase: str
+
+
+# ---- the ledgers (research view) --------------------------------------------------------------
+
+
+def load_ledgers(live_root: Path) -> list[dict]:
+    """Every account-session ledger on disk: the newest run of each (session day, account)."""
+    best: dict[tuple[str, str], tuple[str, dict]] = {}
+    for f in sorted(live_root.glob("*/*/ledger/acct_*.json")):
+        body = read_json(f)
+        if not body:
+            continue
+        key = (body["summary"]["session_date"], body["summary"]["account"])
+        run = f.parent.parent.name  # shadow < shadow-r2 < shadow-r10 in the order of the runs
+        order = (len(run), run)
+        if key not in best or order >= (len(best[key][0]), best[key][0]):
+            best[key] = (run, body)
+    return [b for _, b in (best[k] for k in sorted(best))]
+
+
+def cumulative(ledgers: list[dict]) -> pd.DataFrame:
+    """One row per account over every session found. Money columns are sums across days; the
+    stress column is the harshest scenario's sum. Outages stay visible beside the results."""
+    rows = []
+    for account in sorted({b["summary"]["account"] for b in ledgers}):
+        mine = [b for b in ledgers if b["summary"]["account"] == account]
+        days = [b["summary"] for b in mine]
+        stress: dict[str, float] = {}
+        for d in days:
+            for k, v in d["stress_net_usd"].items():
+                stress[k] = stress.get(k, 0.0) + v
+        rows.append(
+            {
+                "account": account,
+                "sessions": len(mine),
+                "trades": sum(d["trades"] for d in days),
+                "net realized $": round(sum(d["net_realized_eval_usd"] for d in days), 2),
+                "open estimate $": round(days[-1]["open_estimate_usd"], 2),
+                "net P&L est $": round(sum(d["net_pnl_est_usd"] for d in days), 2),
+                "harshest stress $": round(min(stress.values()), 2),
+                "fees $": round(sum(d["fees_usd"] for d in days), 2),
+                "worst day $": round(min(d["net_pnl_est_usd"] for d in days), 2),
+                "books reconcile": all(b["reconciliation"]["ok"] for b in mine),
+                "uncertain slots": sum(d["operational"].get("uncertain_slots", 0) for d in days),
+                "incidents": sum(sum(d["operational"].get("incidents", {}).values()) for d in days),
+            }
+        )
+    out = pd.DataFrame(rows)
+    return (
+        out.sort_values("net P&L est $", ascending=False).reset_index(drop=True)
+        if len(out)
+        else out
+    )

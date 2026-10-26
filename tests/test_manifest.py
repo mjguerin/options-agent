@@ -69,7 +69,17 @@ def failed(result):
 def test_a_draft_covers_every_config_the_run_depends_on(tmp_path):
     m = draft_manifest("exp-9", "shadow", None, 10_000.0)
     names = set(m.config_hashes)
-    assert {"app", "feed", "risk", "orders", "features", "common", "eligibility", "schema"} <= names
+    assert {
+        "app",
+        "feed",
+        "risk",
+        "orders",
+        "features",
+        "common",
+        "eligibility",
+        "schema",
+        "ledger",
+    } <= names
     assert {f"strategy_{s}" for s in ("vpc", "orb", "brt", "fbr", "vmr")} <= names
     assert m.config_hashes == current_hashes() and m.approved.by is None
 

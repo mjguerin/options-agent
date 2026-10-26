@@ -75,6 +75,7 @@ def memory_engine() -> Engine:
     from tournament.accounts import reservations as _reservations  # noqa: F401
     from tournament.alerts import store as _alerts  # noqa: F401
     from tournament.api import store as _controls  # noqa: F401
+    from tournament.ledger import store as _ledgers  # noqa: F401
 
     engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
@@ -171,6 +172,16 @@ class IntentStore:
                 sign = 1 if r.side == "buy" else -1
                 out[r.symbol] = out.get(r.symbol, 0) + sign * r.qty_filled
         return {k: v for k, v in out.items() if v != 0}
+
+    def event_rows(self, client_order_id: str) -> list[tuple[pd.Timestamp, str, dict]]:
+        """(time, kind, detail) in order: the order's history with its clock."""
+        with self.engine.connect() as c:
+            rows = c.execute(
+                select(order_events)
+                .where(order_events.c.client_order_id == client_order_id)
+                .order_by(order_events.c.id)
+            ).all()
+        return [(_ts(r.at), r.kind, json.loads(r.detail)) for r in rows]
 
     def events(self, client_order_id: str) -> list[tuple[str, dict]]:
         with self.engine.connect() as c:

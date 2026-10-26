@@ -110,6 +110,10 @@ kinds:
     severity: critical
     open: "Supervisor gave up restarting: {detail}."
     resolved: "Supervised programs are running."
+  LEDGER_FAILED:
+    severity: warning
+    open: "The session ledger could not be stored: {detail}. The JSON files in the session folder are the record."
+    resolved: "Ledger storage is working."
   RECONCILIATION_FAILED:
     severity: critical
     open: "{account} did not reconcile after the close: {detail}"

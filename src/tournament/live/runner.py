@@ -26,8 +26,10 @@ from tournament.api.config import load_api_config
 from tournament.api.store import ControlStore
 from tournament.appconfig import app_config
 from tournament.features.pipeline import calendar_days, carry_context
+from tournament.ledger.config import load_ledger_config
 from tournament.live.controls import ControlPlane
 from tournament.live.engine import ShadowEngine
+from tournament.live.ledger_writer import write_session_ledgers
 from tournament.live.options_runner import OptionsCollector
 from tournament.live.recovery import mark_outage_from, previous_runs, replay_journals
 from tournament.live.session import LiveSession
@@ -362,6 +364,11 @@ def run_session(
                             incidents.open(
                                 now_end, "RECONCILIATION_FAILED", str(bad)[:200], binding
                             )
+            ledgers = None
+            if accounts is not None and now_end >= pd.Timestamp(day.close_utc):
+                ledgers = store_ledgers(
+                    accounts, session, now_end, manifest, mode, out, incidents, day_dir.parent
+                )
             write_outputs(
                 session,
                 out,
@@ -371,12 +378,62 @@ def run_session(
                 collector,
                 accounts,
                 preflight_report,
-                {"recovered": recovered, "reconciliation": reconciliation, "fresh": fresh},
+                {
+                    "recovered": recovered,
+                    "reconciliation": reconciliation,
+                    "fresh": fresh,
+                    "ledgers": ledgers,
+                },
             )
             if monitor is not None:
                 monitor.tick(pd.Timestamp.now(tz="UTC"))
                 monitor.finish(pd.Timestamp.now(tz="UTC"))
     return session
+
+
+def store_ledgers(accounts, session, now, manifest, mode, out, incidents, live_root) -> dict | None:
+    """Both ledgers for every account, to JSON beside the session and to the ledger tables. A
+    failure to store is reported, never allowed to stop the rest of the shutdown."""
+    try:
+        from tournament.orders.store import default_engine
+
+        cfg = load_ledger_config()
+        experiment = manifest.experiment_id if manifest is not None else "unregistered"
+        api_cfg = load_api_config()
+        try:
+            engine = default_engine()
+        except Exception:  # noqa: BLE001
+            engine = None
+        result = write_session_ledgers(
+            accounts,
+            session,
+            cfg,
+            now,
+            experiment,
+            mode,
+            out / "ledger",
+            heartbeat_path(REPO_ROOT, api_cfg.state.file).parent
+            / "state_history"
+            / f"{session.day.session_date.isoformat()}.jsonl",
+            incidents.store if incidents is not None else None,
+            engine,
+        )
+        if incidents is not None:
+            for binding, r in result["accounts"].items():
+                if not r["reconciled"]:
+                    incidents.open(
+                        now, "RECONCILIATION_FAILED", "ledger identities do not hold", binding,
+                        key=f"RECONCILIATION_FAILED:{binding}:ledger",
+                    )  # fmt: skip
+                if r["stored"] and "error" in r["stored"]:
+                    incidents.open(now, "LEDGER_FAILED", r["stored"]["error"][:160], binding)
+        return {
+            "accounts": result["accounts"],
+            "leader": result["ranking"][0] if result["ranking"] else None,
+        }
+    except Exception as exc:  # noqa: BLE001
+        log.exception("ledgers not written")
+        return {"error": f"{type(exc).__name__}: {exc}"}
 
 
 def write_outputs(

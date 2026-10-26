@@ -368,3 +368,53 @@ def test_an_unreachable_api_leaves_the_page_up_with_a_warning(world, monkeypatch
     monkeypatch.setattr(backend_module, "override", Backend(CFG, client, None, root=world.root))
     at = AppTest.from_file(APP, default_timeout=30).run()
     assert not at.exception and any("API" in w.value for w in at.warning)
+
+
+def write_ledger(root, day, account, net, run="shadow", ok=True):
+    d = root / "data" / "live" / day / run / "ledger"
+    d.mkdir(parents=True, exist_ok=True)
+    body = {
+        "summary": {
+            "session_date": day, "account": account, "start_equity_usd": 10_000.0, "trades": 2,
+            "net_realized_eval_usd": net, "open_estimate_usd": 0.0, "net_pnl_est_usd": net,
+            "fees_usd": 1.3, "stress_net_usd": {"base": net, "plus_2_ticks": net - 40},
+            "operational": {"uncertain_slots": 2, "incidents": {"STOCK_FEED_DOWN": 1}},
+        },
+        "metrics": {"closed_trades": 2, "win_rate": 0.5, "max_drawdown_usd": -25.0},
+        "reconciliation": {"ok": ok, "checks": {"cash": {"ok": ok}}},
+        "trades": [],
+    }  # fmt: skip
+    (d / f"{account.replace(':', '_')}.json").write_text(json.dumps(body))
+    rank = [{"rank": 1, "account": account, "net_pnl_est_usd": net, "promotion_qualified": net > 0,
+             "leader_not_qualified": net <= 0}]  # fmt: skip
+    (d / "ranking.json").write_text(json.dumps(rank))
+
+
+def test_the_ledger_data_keeps_the_newest_run_and_sums_the_days(tmp_path):
+    write_ledger(tmp_path, "2026-10-26", ACCT, 100.0)
+    write_ledger(tmp_path, "2026-10-26", ACCT, 120.0, run="shadow-r2")  # the restart's record
+    write_ledger(tmp_path, "2026-10-27", ACCT, -30.0)
+    write_ledger(tmp_path, "2026-10-27", "acct:orb", 50.0, ok=False)
+    got = data.load_ledgers(tmp_path / "data" / "live")
+    assert len(got) == 3  # one per session day and account, the newest run of each
+    t = data.cumulative(got).set_index("account")
+    assert t.loc[ACCT, "net P&L est $"] == 90.0 and t.loc[ACCT, "sessions"] == 2
+    assert t.loc[ACCT, "uncertain slots"] == 4 and t.loc[ACCT, "incidents"] == 2  # outages visible
+    assert bool(t.loc["acct:orb", "books reconcile"]) is False
+    assert data.cumulative([]).empty and data.load_ledgers(tmp_path / "none") == []
+
+
+def test_research_page_shows_the_ledgers_and_an_unprofitable_leader(app):
+    at, world = app
+    write_ledger(world.root, "2026-10-26", ACCT, -10.0)
+    switch(at, "Research")
+    tables = [d.value for d in at.dataframe]
+    assert any("net P&L est $" in t.columns for t in tables)
+    ranking = [t for t in tables if "promotion qualified" in t.columns][0]
+    assert ranking.iloc[0]["note"] == "leads, but does not qualify"
+
+
+def test_research_page_without_ledgers_says_so(app):
+    at, _ = app
+    switch(at, "Research")
+    assert any("None yet" in i.value for i in at.info)

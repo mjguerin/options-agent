@@ -95,7 +95,7 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 - [x] FastAPI controls: pause, resume, cancel, close, flatten, emergency (BRD 14) (src/tournament/api, migration 0004, engine-side control plane, 33 tests; D-73 to D-76 drafts; waiting for the owner to add API_OWNER_TOKEN and API_VIEWER_TOKEN to .env)
 - [x] Streamlit dashboard bound to localhost; reach it through an SSH tunnel (src/tournament/dashboard, `tournament dashboard run`, Supervisor program, 20 tests including the app run headless; D-77, D-78 drafts; the research view waits for the evaluation ledger)
 - [ ] Telegram alert bot in deterministic code (built Oct 26, 2026: incidents and outbox in PostgreSQL migration 0003, sender, bot with watchdogs, engine-side monitor, Supervisor program, D-70 to D-72 drafts, 24 tests with a fake sender; waiting for TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env to send the first real message)
-- [ ] Evaluation ledger beside the broker ledger (BRD 12.3)
+- [x] Evaluation ledger beside the broker ledger (BRD 12.3) (src/tournament/ledger: broker and evaluation ledgers, reconciliation identities, metrics, ranking with promotion gates, append-only tables in migration 0005, dashboard research view, 25 tests including hand-computed fixtures; D-79 to D-83 drafts)
 
 **Agent**
 

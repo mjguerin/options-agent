@@ -1,0 +1,54 @@
+# The two ledgers and the performance report (BRD 12, 11; AC-11, AC-12, AC-17). DRAFT.
+#
+# Broker ledger: what the broker (the modeled broker in shadow, Alpaca paper later) says
+# happened: fills, cash, positions. Evaluation ledger: the same trades re-priced under one
+# declared set of fill and cost assumptions, identical for every competitor, so a strategy is
+# compared on its decisions and not on a fill that went better or worse for it. The two are kept
+# apart and reconciled; their differences are reported, never netted away.
+#
+# Cost values are placeholders until the owner approves the cost model (decision D10): they are
+# zero here on purpose, and the stress scenarios show what costs would do to every result.
+# No defaults in code.
+
+version: ledger-v1-draft
+
+evaluation:
+  entry_price: ask                   # the executable side at the decision: buys at the ask
+  exit_price: bid                    # sells at the bid
+  entry_slippage_ticks: 0            # worse than the quote, in ticks, on top of the side
+  exit_slippage_ticks: 0
+  tick_size: 0.01
+  contract_multiplier: 100
+  missing_quote: flag_and_use_broker # flag_and_use_broker | exclude: a decision with no usable quote
+
+costs:                               # D10: awaiting approval; zero until then
+  commission_per_contract: 0.0       # each side
+  regulatory_fee_per_contract: 0.0   # each side
+  fee_multiplier_stress: 1.0
+
+stress:                              # execution-cost scenarios run on every trade (BRD 12.4)
+  - {name: base,        extra_slippage_ticks: 0, fee_multiplier: 1.0}
+  - {name: plus_1_tick, extra_slippage_ticks: 1, fee_multiplier: 1.0}
+  - {name: plus_2_ticks, extra_slippage_ticks: 2, fee_multiplier: 1.0}
+  - {name: fees_x2,     extra_slippage_ticks: 0, fee_multiplier: 2.0}
+
+reconciliation:                      # tolerances for "the ledgers agree"
+  cash_usd: 0.01                     # cash from the broker against cash rebuilt from its fills
+  trade_pnl_usd: 0.01                # per trade, only where the assumptions are set equal to fills
+  position_contracts: 0
+
+snapshots:
+  interval_s: 30                     # equity snapshots come from the engine's published history
+
+report:
+  win_threshold_usd: 0.0             # a trade is a win if its net result is above this
+  annualization: none                # no annualized figures until a policy is approved
+  profit_factor_when_no_losses: undefined   # undefined | infinity
+
+promotion_gates:                     # proposals only (BRD 12.5), null = not yet set, not evaluated
+  min_net_pnl_usd: 0.0
+  max_drawdown_pct_of_start: null
+  min_trades: null
+  min_active_days: null
+  max_unresolved_accounting_incidents: 0
+  min_conservative_net_pnl_usd: null # on the harshest stress scenario

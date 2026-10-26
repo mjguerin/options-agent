@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from tournament.appconfig import app_config
 from tournament.features.engine import FeatureConfig
+from tournament.ledger.config import load_ledger_config
 from tournament.live.option_stream import check_option_feed
 from tournament.live.stream import FeedGuardError
 from tournament.orders.config import load_orders_config
@@ -113,6 +114,7 @@ def current_hashes() -> dict[str, str]:
         "feed": _file_hash(CONFIG / "live" / "feed-v1.yaml"),
         "risk": load_risk_config().config_hash,
         "orders": load_orders_config().config_hash,
+        "ledger": load_ledger_config().config_hash,
         "features": FeatureConfig.load().config_hash,
         "common": _file_hash(CONFIG / "strategies" / "common-v1.yaml"),
         "eligibility": _file_hash(

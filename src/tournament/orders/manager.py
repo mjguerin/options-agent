@@ -131,7 +131,16 @@ class OrderManager:
             now,
         )
         self.store.insert(intent)  # before anything is sent (OM-02)
-        self.store.event(intent.client_order_id, now, "intent", qty=qty, limit=intent.limit_price)
+        # the quote the decision was made on: the evaluation ledger prices the trade from it
+        self.store.event(
+            intent.client_order_id,
+            now,
+            "intent",
+            qty=qty,
+            limit=intent.limit_price,
+            bid=bid,
+            ask=ask,
+        )
         return self._send(intent, now)
 
     def abandon_entry(self, now: pd.Timestamp, candidate_id: str, reason: str) -> list[Intent]:
@@ -224,7 +233,14 @@ class OrderManager:
         )
         self.store.insert(intent)
         self.store.event(
-            intent.client_order_id, now, "intent", qty=qty, reason=reason, order_type=order_type
+            intent.client_order_id,
+            now,
+            "intent",
+            qty=qty,
+            reason=reason,
+            order_type=order_type,
+            bid=bid if usable else None,
+            ask=ask if usable else None,
         )
         return self._send(intent, now)
 

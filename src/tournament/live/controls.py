@@ -198,6 +198,8 @@ class ControlPlane:
                             sum(p["unrealized_usd"] or 0.0 for p in rt.positions_detail(now)), 2
                         ),
                         "exposure_usd": round(rt.ledger.exposure_usd(b), 2),
+                        "risk_pnl_usd": self._pnl_view(rt, now)["risk_usd"],
+                        "unmarked": self._pnl_view(rt, now)["unmarked_positions"],
                     }
                     for b, rt in self.runtimes.items()
                 },

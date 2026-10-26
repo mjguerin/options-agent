@@ -197,6 +197,67 @@ def page_operations(b, status: dict) -> None:
         st.caption("No nightly report yet.")
 
 
+def page_research(b, status: dict) -> None:
+    ledgers = data.load_ledgers(b.live_root)
+    if not ledgers:
+        st.info("The ledgers are written after each session's close. None yet.")
+        return
+    table = data.cumulative(ledgers)
+    st.subheader("All sessions so far")
+    st.dataframe(table, hide_index=True, use_container_width=True)
+    st.caption(
+        "Net P&L is the evaluation ledger (every account re-priced the same way) plus open "
+        "positions at their bid. Outages and incidents are shown, never excluded."
+    )
+    last = max(b_["summary"]["session_date"] for b_ in ledgers)
+    ranking = data.read_json(
+        next(iter(sorted(b.live_root.glob(f"{last}/*/ledger/ranking.json"))), b.live_root)
+    )
+    if ranking:
+        st.subheader(f"Ranking, {last}")
+        rows = [
+            {
+                "rank": r["rank"],
+                "account": r["account"],
+                "net P&L est $": r["net_pnl_est_usd"],
+                "promotion qualified": r["promotion_qualified"],
+                "note": "leads, but does not qualify" if r["leader_not_qualified"] else "",
+            }
+            for r in ranking
+        ]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        st.caption(
+            "A gate with no threshold set is not evaluated. Gates are proposals, not approvals."
+        )
+    acct = st.selectbox("Account", sorted({b_["summary"]["account"] for b_ in ledgers}))
+    mine = [b_ for b_ in ledgers if b_["summary"]["account"] == acct][-1]
+    st.subheader(f"{acct}, {mine['summary']['session_date']}")
+    c = st.columns(4)
+    m = mine["metrics"]
+    c[0].metric("Closed trades", m["closed_trades"])
+    c[1].metric("Win rate", "-" if m["win_rate"] is None else f"{m['win_rate']:.0%}")
+    c[2].metric(
+        "Max drawdown", "-" if m["max_drawdown_usd"] is None else f"${m['max_drawdown_usd']:,.0f}"
+    )
+    c[3].metric("Books reconcile", "yes" if mine["reconciliation"]["ok"] else "NO")
+    trades = pd.DataFrame(mine["trades"])
+    if trades.empty:
+        st.caption("No trades.")
+    else:
+        cols = ["symbol", "qty", "closed_qty", "broker_entry", "broker_exit", "eval_entry",
+                "eval_exit", "broker_gross_usd", "eval_gross_usd", "fees_usd", "net_eval_usd",
+                "exit_reasons", "flags"]  # fmt: skip
+        st.dataframe(trades[cols], hide_index=True, use_container_width=True)
+        st.caption(
+            "Broker columns are what the broker side recorded. Evaluation columns re-price "
+            "the same trades the same way for every account."
+        )
+    st.write(
+        "**Reconciliation**", {k: v["ok"] for k, v in mine["reconciliation"]["checks"].items()}
+    )
+    st.write("**Operating conditions**", mine["summary"]["operational"])
+
+
 def page_controls(b, status: dict) -> None:
     from tournament.api.config import load_api_config
 
@@ -284,11 +345,14 @@ if backend.setup_error:
     st.stop()
 current = api_call(backend.api.status, default={"engine_reporting": False, "state": None})
 header(current)
-page = st.sidebar.radio("View", ["Overview", "Strategies", "Execution", "Operations", "Controls"])
+page = st.sidebar.radio(
+    "View", ["Overview", "Strategies", "Execution", "Research", "Operations", "Controls"]
+)
 {
     "Overview": page_overview,
     "Strategies": page_strategies,
     "Execution": page_execution,
+    "Research": page_research,
     "Operations": page_operations,
     "Controls": page_controls,
 }[page](backend, current)

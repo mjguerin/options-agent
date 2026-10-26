@@ -9,6 +9,7 @@ from tournament.accounts import reservations as _reservations  # noqa: F401
 from tournament.alerts import store as _alerts  # noqa: F401
 from tournament.api import store as _controls  # noqa: F401
 from tournament.db import database_url, metadata
+from tournament.ledger import store as _ledgers  # noqa: F401
 from tournament.orders import store as _tables  # noqa: F401  (registers the tables)
 
 config = context.config
