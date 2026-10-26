@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from datetime import date
 from pathlib import Path
 from typing import Literal
 
@@ -65,6 +66,7 @@ class Watchdog(_S):
     engine_heartbeat_max_age_s: float = Field(gt=0)
     engine_grace_after_start_s: float = Field(ge=0)
     nightly_deadline_after_s: float = Field(gt=0)
+    nightly_first_check_date: date
     backup_log: str
     supervisor_conf: str
     supervisorctl: str

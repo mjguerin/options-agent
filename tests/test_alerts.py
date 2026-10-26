@@ -250,6 +250,14 @@ def test_a_missing_or_silent_engine_is_found_only_while_it_should_be_running():
     assert not any(f.active for f in none)  # not a session day
 
 
+FIRST = date(2026, 10, 26)
+
+
+def test_no_report_is_demanded_for_days_before_the_job_existed(tmp_path):
+    assert not check_nightly(date(2026, 10, 23), tmp_path, FIRST)[0].active
+    assert check_nightly(date(2026, 10, 26), tmp_path, FIRST)[0].active
+
+
 def test_the_nightly_job_must_report_and_report_clean(tmp_path):
     tz = "America/New_York"
     now = pd.Timestamp("2026-10-27T00:30:00Z")  # Monday 20:30 ET: past 16:45 + 3 h? no, 19:45
@@ -259,13 +267,13 @@ def test_the_nightly_job_must_report_and_report_clean(tmp_path):
     monday = pd.Timestamp("2026-11-02T10:00:00Z")
     assert last_weekday_due(monday, tz, "16:45", WD.nightly_deadline_after_s) == date(2026, 10, 30)
     d = date(2026, 10, 26)
-    assert check_nightly(d, tmp_path)[0].active  # no report
+    assert check_nightly(d, tmp_path, FIRST)[0].active  # no report
     (tmp_path / "nightly_2026-10-26.json").write_text(
         json.dumps({"missing": {"2026-10-26": ["spy_trades"]}})
     )
-    assert check_nightly(d, tmp_path)[0].active
+    assert check_nightly(d, tmp_path, FIRST)[0].active
     (tmp_path / "nightly_2026-10-26.json").write_text(json.dumps({"missing": {}, "error": None}))
-    assert not check_nightly(d, tmp_path)[0].active
+    assert not check_nightly(d, tmp_path, FIRST)[0].active
 
 
 def test_backup_must_have_succeeded_not_merely_run(tmp_path):

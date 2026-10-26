@@ -73,7 +73,9 @@ def last_weekday_due(now: pd.Timestamp, tz, start_hhmm: str, deadline_s: float) 
         d -= timedelta(days=1)
 
 
-def check_nightly(due_date: date, ops_dir: Path) -> list[Finding]:
+def check_nightly(due_date: date, ops_dir: Path, first_date: date) -> list[Finding]:
+    if due_date < first_date:  # the job did not exist yet: nothing was due
+        return [Finding("NIGHTLY_FAILED", False)]
     path = ops_dir / f"nightly_{due_date.isoformat()}.json"
     try:
         s = json.loads(path.read_text())

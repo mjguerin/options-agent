@@ -33,6 +33,7 @@ watchdog:                            # checks the bot runs itself, on the host
   engine_heartbeat_max_age_s: 90     # no heartbeat for this long during the session = engine down
   engine_grace_after_start_s: 300    # the engine gets this long after its start time
   nightly_deadline_after_s: 10800    # the nightly job must have reported within 3 h of its start
+  nightly_first_check_date: 2026-10-26   # no report is demanded for days before the job was installed
   backup_log: ~/Library/Logs/options-tournament/backup.log
   backup_max_age_h: 26
   supervisor_conf: data/run/supervisord.conf

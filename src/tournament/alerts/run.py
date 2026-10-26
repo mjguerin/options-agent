@@ -52,7 +52,7 @@ def build_watches(cfg: AlertsConfig, repo: Path, engine, today_session) -> list:
         due = last_weekday_due(
             now, app.exchange.tz, app.nightly.start_time, w.nightly_deadline_after_s
         )
-        return check_nightly(due, repo / "data" / "ops")
+        return check_nightly(due, repo / "data" / "ops", w.nightly_first_check_date)
 
     return [
         engine_watch,

@@ -274,5 +274,5 @@ def test_the_nightly_report_with_thin_data_is_a_failure(tmp_path):
     (tmp_path / "nightly_2026-10-26.json").write_text(
         json.dumps({"missing": {}, "error": None, "quality_issues": {"2026-10-26": ["x"]}})
     )
-    f = check_nightly(d, tmp_path)[0]
+    f = check_nightly(d, tmp_path, d)[0]
     assert f.active and "1 too thin" in f.detail
