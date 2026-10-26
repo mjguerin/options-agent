@@ -1,5 +1,5 @@
 # Live SPY feed (Step 3; specs/shared.md SD-01, SD-03; MD-02, MD-03, MD-09). DRAFT: the
-# thresholds below are Step 3 decisions D-48 to D-51 awaiting owner approval.
+# thresholds below are Step 3 decisions D-48 to D-54 awaiting owner approval.
 
 version: feed-v1-draft
 sip_url: wss://stream.data.alpaca.markets/v2/sip
@@ -10,3 +10,13 @@ stale_after_s: 5            # D-48: no message for this long while connected = f
 test_stale_after_s: 15      # the test stream sends one trade every 5 s
 tick_s: 0.25                # how often due slots and staleness are checked without input
 reconnect_backoff_s: [1, 2, 4, 8, 15, 30]
+
+# Option quotes (OPRA). D-52 to D-54, DRAFT.
+options:
+  feed: opra                 # MD-09: shadow and paper accept only the real-time feed
+  max_symbols: 200           # D-53: not documented by the provider; 198 symbols were accepted in a probe on 2026-10-26
+  quote_max_age_s: 5         # D-52: older than this is not a reliable price
+  quote_max_delivery_lag_s: 2  # D-52: received this long after its own timestamp = delayed feed
+  feed_silent_after_s: 10    # D-52: no option message for this long while subscribed = down
+  watch_strikes_each_side: 10  # D-54: pre-D06 watch set: 0DTE, 10 strikes each side of spot
+  watch_expiry_days: [0]

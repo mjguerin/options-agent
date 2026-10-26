@@ -20,6 +20,7 @@ import yaml
 
 from tournament.features.pipeline import calendar_days, carry_context
 from tournament.live.engine import ShadowEngine
+from tournament.live.options_runner import OptionsCollector
 from tournament.live.session import LiveSession
 from tournament.live.stream import AlpacaStockStream
 from tournament.marketdata.calendar import SessionDay
@@ -68,14 +69,27 @@ def make_engine(
     return ShadowEngine(session, all_workers(), prior, baseline, usage=Usage.LIVE)
 
 
+def latest_spy_price(creds) -> float:
+    from alpaca.data.historical import StockHistoricalDataClient
+    from alpaca.data.requests import StockLatestTradeRequest
+
+    client = StockHistoricalDataClient(creds.key_id, creds.secret_key)
+    return float(
+        client.get_stock_latest_trade(StockLatestTradeRequest(symbol_or_symbols="SPY", feed="sip"))[
+            "SPY"
+        ].price
+    )
+
+
 def run_session(
     day: SessionDay,
     mode: str,
-    key_id: str,
-    secret: str,
+    creds,
     out_root: Path,
     store: HistoryStore | None = None,
+    options: bool = True,
 ) -> LiveSession:
+    key_id, secret = creds.key_id, creds.secret_key
     fc = load_feed_config()
     delay_s = yaml.safe_load(COMMON.read_text())["clock"]["finalize_delay_s"]
     test = mode == "test"
@@ -98,11 +112,30 @@ def run_session(
         ),  # fmt: skip
     )
     engine = make_engine(session, store, day) if mode == "shadow" else None
+    collector = None
+    if mode == "shadow" and options:
+        from tournament.adapters.alpaca_history import AlpacaHistory
+
+        try:
+            collector = OptionsCollector(
+                fc["options"], creds, day, mode, latest_spy_price(creds), AlpacaHistory(creds)
+            )
+        except Exception as exc:  # noqa: BLE001 - the SPY recording must go on without options
+            log.exception("option feed not started: %s", exc)
+    if collector is not None:
+        previous = session.on_bar
+
+        def on_bar(row: dict) -> None:
+            if previous:
+                previous(row)
+            collector.on_bar(row)
+
+        session.on_bar = on_bar
     until = pd.Timestamp(day.close_utc) + session.delay + pd.Timedelta(seconds=1)
     with (out / "stream.jsonl").open("a") as journal:
 
-        def record(raw: str, received: pd.Timestamp) -> None:
-            journal.write(f'{{"r":"{received.isoformat()}","m":{raw}}}\n')
+        def record(msgs: list[dict], received: pd.Timestamp) -> None:
+            journal.write(json.dumps({"r": received.isoformat(), "m": msgs}) + "\n")
 
         stream = AlpacaStockStream(
             fc["test_url"] if test else fc["sip_url"],
@@ -114,13 +147,20 @@ def run_session(
             on_connected=session.on_connected,
             on_disconnected=session.on_disconnected,
             on_tick=session.tick,
-            on_raw=record,
+            on_frame=record,
             tick_s=fc["tick_s"],
             backoff_s=tuple(fc["reconnect_backoff_s"]),
         )
-        asyncio.run(stream.run(until))
+
+        async def main() -> None:
+            tasks = [stream.run(until)]
+            if collector is not None:
+                tasks.append(collector.run(until))
+            await asyncio.gather(*tasks)
+
+        asyncio.run(main())
     session.tick(until)
-    write_outputs(session, out, mode, stream.connects, engine)
+    write_outputs(session, out, mode, stream.connects, engine, collector)
     return session
 
 
@@ -130,6 +170,7 @@ def write_outputs(
     mode: str,
     connects: int,
     engine: ShadowEngine | None = None,
+    collector: OptionsCollector | None = None,
 ) -> None:
     bars = pd.DataFrame(session.bars)
     if not bars.empty:
@@ -172,6 +213,8 @@ def write_outputs(
             if lat
             else None,
         }
+    if collector is not None:
+        summary["options"] = collector.write(out)
     (out / "summary.json").write_text(json.dumps(summary, indent=1, default=str))
 
 

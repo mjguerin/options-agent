@@ -69,10 +69,10 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 
 **Live market data**
 
-- [ ] Live feed handler: one shared SIP + OPRA stream inside the engine process, fanned out to all five workers (FR-03) (SIP part built Oct 26, 2026: `tournament feed run` records a shadow session and runs the shared features and all five workers slot by slot; live bars and decisions identical to replay on stored days, 36 ms median per slot. Still to do: OPRA stream)
-- [ ] Subscriptions limited to SPY and the option contracts in play, within stream limits (MD-08, MD-10)
-- [ ] Quote freshness and feature-readiness gates on entries (MD-04); stale feed halts entries (AC-08)
-- [ ] Startup rejects the indicative options feed in paper mode (MD-09, AC-23)
+- [ ] Live feed handler: one shared SIP + OPRA stream inside the engine process, fanned out to all five workers (FR-03) (SIP part built Oct 26, 2026: `tournament feed run` records a shadow session and runs the shared features and all five workers slot by slot; live bars and decisions identical to replay on stored days, 36 ms median per slot. OPRA option-quote stream built Oct 26, 2026: msgpack client, quote book, subscription manager; fan-out of quotes to the account runtimes comes with them)
+- [x] Subscriptions limited to SPY and the option contracts in play, within stream limits (MD-08, MD-10) (src/tournament/live/subscriptions.py; held contracts never cut; D-53, D-54 drafts; the in-play set comes from D06 and the position manager)
+- [ ] Quote freshness and feature-readiness gates on entries (MD-04); stale feed halts entries (AC-08) (option quote gates and feed-level halt built and tested, D-52 draft; feature readiness gating exists in the workers; wiring into the order path comes with the account runtimes)
+- [x] Startup rejects the indicative options feed in paper mode (MD-09, AC-23) (check_option_feed, unit-tested; the stock side only accepts the SIP URL)
 
 **Accounts, risk and sizing**
 

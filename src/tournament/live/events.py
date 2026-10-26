@@ -59,7 +59,11 @@ class Status:
     ts: pd.Timestamp
 
 
-def ts_of(value: str) -> pd.Timestamp:
+def ts_of(value: str | int) -> pd.Timestamp:
+    """RFC 3339 text (stock stream, JSON) or integer nanoseconds since the epoch (option
+    stream: MessagePack timestamps are decoded to ns, so no precision is lost)."""
+    if isinstance(value, int):
+        return pd.Timestamp(value, unit="ns", tz="UTC")
     return pd.Timestamp(value).tz_convert("UTC")
 
 

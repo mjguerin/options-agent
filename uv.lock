@@ -205,6 +205,7 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "alpaca-py" },
+    { name = "msgpack" },
     { name = "pandas" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pyarrow" },
@@ -212,6 +213,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "sqlalchemy" },
+    { name = "websockets" },
 ]
 
 [package.dev-dependencies]
@@ -224,6 +226,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "alpaca-py", specifier = ">=0.40" },
+    { name = "msgpack", specifier = ">=1.2.3" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pyarrow", specifier = ">=17" },
@@ -231,6 +234,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "sqlalchemy", specifier = ">=2.0" },
+    { name = "websockets", specifier = ">=17.3" },
 ]
 
 [package.metadata.requires-dev]

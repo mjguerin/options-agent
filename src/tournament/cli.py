@@ -147,7 +147,7 @@ def _feed_run(args: argparse.Namespace) -> int:
         from tournament.marketdata.store import HistoryStore
 
         store = HistoryStore(_history_root()) if args.decisions else None
-        s = run_session(day, mode, creds.key_id, creds.secret_key, out_root, store)
+        s = run_session(day, mode, creds, out_root, store, options=args.options)
     except (FeedGuardError, FatalStreamError) as exc:
         print(f"Feed stopped: {exc}", file=sys.stderr)
         return 1
@@ -211,6 +211,12 @@ def build_parser() -> argparse.ArgumentParser:
         dest="decisions",
         action="store_false",
         help="record the feed only; don't run the five workers",
+    )
+    run.add_argument(
+        "--no-options",
+        dest="options",
+        action="store_false",
+        help="don't collect OPRA option quotes",
     )
     run.set_defaults(func=_feed_run)
     return parser
