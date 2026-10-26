@@ -19,7 +19,7 @@ from tournament.accounts.reservations import ReservationLedger
 from tournament.accounts.runtime import AccountRouter, AccountRuntime
 from tournament.db import metadata
 from tournament.live.options_runner import OptionsCollector
-from tournament.live.quotes import usable_touch
+from tournament.live.quotes import quote_provenance, usable_touch
 from tournament.marketdata.calendar import SessionDay
 from tournament.orders.config import load_orders_config
 from tournament.orders.manager import OrderManager
@@ -68,6 +68,7 @@ class ShadowAccounts:
                     self.store,
                     self.orders_cfg,
                     quotes=lambda s, now: usable_touch(collector.feed.view(s, now)),
+                    quote_detail=lambda s, now: quote_provenance(collector.feed.view(s, now)),
                 ),
                 self.store,
                 ReservationLedger(self.engine, self.risk.limits, mult),

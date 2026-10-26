@@ -71,6 +71,7 @@ def write_session_ledgers(
             broker_positions={p.symbol: p.qty for p in sim.positions()},
             open_marks=rt.positions_detail(now),
             equity=load_equity(history_file, binding),
+            execution_source="modeled" if mode == "shadow" else "broker",
             operational={
                 "uncertain_slots": uncertain,
                 "halted_slots": halted,

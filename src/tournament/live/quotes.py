@@ -71,6 +71,26 @@ def usable_touch(view: QuoteView) -> tuple[float | None, float | None]:
     return None, None
 
 
+def quote_provenance(view: QuoteView) -> dict:
+    """What the evaluation benchmark cites about a decision-time quote (D-80): the source and
+    receive times, the sizes, the venue and condition codes, and whether it passed the gates."""
+    q = view.quote
+    if q is None:
+        return {"usable": False, "reasons": list(view.reasons)}
+    return {
+        "usable": view.usable,
+        "reasons": list(view.reasons),
+        "quote_ts": q.ts.isoformat(),
+        "received_ts": q.received.isoformat(),
+        "age_s": view.age_s,
+        "bid_size": q.bid_size,
+        "ask_size": q.ask_size,
+        "bid_exchange": q.bid_exchange,
+        "ask_exchange": q.ask_exchange,
+        "condition": q.condition,
+    }
+
+
 def quote_from(msg: dict, received: pd.Timestamp) -> OptionQuote:
     return OptionQuote(
         msg["S"],

@@ -1,11 +1,14 @@
-# Order handling for every strategy account (BRD OM-01 to OM-08, EX-03 to EX-06; D08). DRAFT:
-# initial values proposed by the drafter on 2026-10-26, for the owner to adjust.
+# Order handling for every strategy account (BRD OM-01 to OM-08, EX-03 to EX-06; D08). AGREED by
+# the owner on 2026-10-26 as orders-v1 (D-60 to D-62), with the complete safety semantics: fresh-bid
+# repricing at valid increments, remaining-quantity reconciliation before every replacement, no
+# replacement or market escalation beside an unresolved order, and no exposure released by a
+# requested (unconfirmed) cancel.
 #
 # Every number is data. Changing one is a new orders version and a new evaluation segment
 # (FR-09): copy this file to orders-v2.yaml and select it with TOURNAMENT_ORDERS_CONFIG.
 # No defaults in code: a missing value stops startup.
 
-version: orders-v1-draft
+version: orders-v1
 
 client_order_id:
   prefix: opt                        # <prefix>-<account>-<candidate hash>-<purpose><n>

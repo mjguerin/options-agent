@@ -1,16 +1,18 @@
-# The two ledgers and the performance report (BRD 12, 11; AC-11, AC-12, AC-17). DRAFT.
+# The two ledgers and the performance report (BRD 12, 11; AC-11, AC-12, AC-17). AGREED by the
+# owner on 2026-10-26 with amendments (D-79 to D-83); the cost rates are not yet verified (D10).
 #
-# Broker ledger: what the broker (the modeled broker in shadow, Alpaca paper later) says
-# happened: fills, cash, positions. Evaluation ledger: the same trades re-priced under one
-# declared set of fill and cost assumptions, identical for every competitor, so a strategy is
-# compared on its decisions and not on a fill that went better or worse for it. The two are kept
-# apart and reconciled; their differences are reported, never netted away.
+# Execution ledger: what the execution side recorded: fills, cash, positions. In shadow mode it is
+# the modeled-execution ledger; a broker ledger exists only once paper execution starts.
+# Evaluation ledger: the same executions re-priced against a benchmark under one declared set of
+# assumptions, identical for every competitor. The benchmark is the quote the application held when
+# each decision was made (a signal price, not an executable fill), so a strategy is compared on its
+# decisions and not on a fill that went better or worse for it. The two are reconciled through an
+# explained difference, never netted and never combined into one result.
 #
-# Cost values are placeholders until the owner approves the cost model (decision D10): they are
-# zero here on purpose, and the stress scenarios show what costs would do to every result.
+# Until the cost model is approved, results are labelled "gross of unmodeled costs".
 # No defaults in code.
 
-version: ledger-v1-draft
+version: ledger-v1
 
 evaluation:
   entry_price: ask                   # the executable side at the decision: buys at the ask
@@ -21,34 +23,42 @@ evaluation:
   contract_multiplier: 100
   missing_quote: flag_and_use_broker # flag_and_use_broker | exclude: a decision with no usable quote
 
-costs:                               # D10: awaiting approval; zero until then
-  commission_per_contract: 0.0       # each side
-  regulatory_fee_per_contract: 0.0   # each side
-  fee_multiplier_stress: 1.0
+costs:                               # D10: structure agreed; rates not yet verified
+  status: unapproved                 # unapproved | approved: results are labelled gross until approved
+  schedule:                          # effective-dated, per contract and per side
+    - effective_from: 2026-10-26
+      commission_per_contract: 0.0
+      regulatory_fee_per_contract: 0.0
+      source: placeholder until the owner verifies the account's commission and the current
+        Alpaca options regulatory (TAF, ORF, OCC, CAT) fee schedule
 
-stress:                              # execution-cost scenarios run on every trade (BRD 12.4)
-  - {name: base,        extra_slippage_ticks: 0, fee_multiplier: 1.0}
-  - {name: plus_1_tick, extra_slippage_ticks: 1, fee_multiplier: 1.0}
-  - {name: plus_2_ticks, extra_slippage_ticks: 2, fee_multiplier: 1.0}
-  - {name: fees_x2,     extra_slippage_ticks: 0, fee_multiplier: 2.0}
+stress:                              # execution-cost scenarios run on every trade (BRD 12.4, D-80)
+  - {name: base,           extra_slippage_ticks: 0, fee_multiplier: 1.0}
+  - {name: plus_1_tick,    extra_slippage_ticks: 1, fee_multiplier: 1.0}
+  - {name: plus_2_ticks,   extra_slippage_ticks: 2, fee_multiplier: 1.0}
+  - {name: fees_x2,        extra_slippage_ticks: 0, fee_multiplier: 2.0}
+  - {name: combined_harsh, extra_slippage_ticks: 2, fee_multiplier: 2.0}
+harshest_scenario: combined_harsh    # the one the promotion gate uses
 
-reconciliation:                      # tolerances for "the ledgers agree"
-  cash_usd: 0.01                     # cash from the broker against cash rebuilt from its fills
-  trade_pnl_usd: 0.01                # per trade, only where the assumptions are set equal to fills
-  position_contracts: 0
+reconciliation:                      # tolerances by identity and unit (D-82)
+  cash_usd: 0.01                     # money: cash from the ledger against cash rebuilt from fills
+  realized_usd: 0.01                 # money: realized result from trades against from cash
+  position_contracts: 0              # quantities: exact
+  record_count: 0                    # counts: exact
 
 snapshots:
-  interval_s: 30                     # equity snapshots come from the engine's published history
+  interval_s: 30                     # plus a point when positions or realized result change
 
 report:
-  win_threshold_usd: 0.0             # a trade is a win if its net result is above this
+  win_threshold_usd: 0.0             # a closed episode is a win only if its net is strictly above this
   annualization: none                # no annualized figures until a policy is approved
   profit_factor_when_no_losses: undefined   # undefined | infinity
 
-promotion_gates:                     # proposals only (BRD 12.5), null = not yet set, not evaluated
-  min_net_pnl_usd: 0.0
-  max_drawdown_pct_of_start: null
-  min_trades: null
-  min_active_days: null
+promotion_gates:                     # every gate is mandatory; null = not set = NOT_EVALUABLE (D-83)
+  min_net_pnl_usd: 0.0               # strictly positive after approved costs
   max_unresolved_accounting_incidents: 0
-  min_conservative_net_pnl_usd: null # on the harshest stress scenario
+  min_harsh_net_pnl_usd: 0.0         # strictly positive on the combined harsh scenario
+  max_drawdown_pct_of_start: null    # owner's business-risk decision
+  min_trades: null                   # closed trades; set with D09
+  min_active_days: null              # days with an executed entry; set with D09
+  confirmation_policy: unset         # unset | approved (D09)

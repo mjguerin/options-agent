@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from datetime import date
 from pathlib import Path
 from typing import Literal
 
@@ -34,10 +35,31 @@ class Evaluation(_S):
     missing_quote: Literal["flag_and_use_broker", "exclude"]
 
 
-class Costs(_S):
+class CostRate(_S):
+    effective_from: date
     commission_per_contract: float = Field(ge=0)
     regulatory_fee_per_contract: float = Field(ge=0)
-    fee_multiplier_stress: float = Field(gt=0)
+    source: str  # where the rates came from, so an auditor can check them
+
+
+class Costs(_S):
+    status: Literal["unapproved", "approved"]
+    schedule: list[CostRate] = Field(min_length=1)  # effective-dated, each side of a trade
+
+    def rate_on(self, day: date | str | None) -> CostRate:
+        """The rate in force on a session day (the latest schedule entry if no day is given)."""
+        ordered = sorted(self.schedule, key=lambda r: r.effective_from)
+        if day is None:
+            return ordered[-1]
+        d = date.fromisoformat(day) if isinstance(day, str) else day
+        found = [r for r in ordered if r.effective_from <= d]
+        if not found:
+            raise ValueError(f"no cost rate is effective on {d}")
+        return found[-1]
+
+    @property
+    def label(self) -> str:
+        return "net of approved costs" if self.status == "approved" else "gross of unmodeled costs"
 
 
 class Scenario(_S):
@@ -47,9 +69,16 @@ class Scenario(_S):
 
 
 class Reconciliation(_S):
-    cash_usd: float = Field(ge=0)
-    trade_pnl_usd: float = Field(ge=0)
-    position_contracts: int = Field(ge=0)
+    cash_usd: float = Field(ge=0)  # money: the documented rounding of cents, nothing more
+    realized_usd: float = Field(ge=0)
+    position_contracts: int = Field(ge=0)  # quantities and counts must match exactly
+    record_count: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _exact_counts(self):
+        if self.position_contracts != 0 or self.record_count != 0:
+            raise ValueError("contract quantities and record counts require exact equality (0)")
+        return self
 
 
 class Snapshots(_S):
@@ -63,12 +92,16 @@ class Report(_S):
 
 
 class Gates(_S):
-    min_net_pnl_usd: float | None
-    max_drawdown_pct_of_start: float | None
-    min_trades: int | None
-    min_active_days: int | None
+    """Every gate is mandatory. A gate whose threshold is unset is NOT_EVALUABLE and blocks
+    qualification: leaving a value out never removes a requirement."""
+
+    min_net_pnl_usd: float | None  # strictly above, after approved costs
     max_unresolved_accounting_incidents: int | None
-    min_conservative_net_pnl_usd: float | None
+    min_harsh_net_pnl_usd: float | None  # strictly above, on the harshest scenario
+    max_drawdown_pct_of_start: float | None
+    min_trades: int | None  # closed trades
+    min_active_days: int | None  # days with at least one executed entry
+    confirmation_policy: Literal["unset", "approved"]
 
 
 class LedgerConfig(_S):
@@ -76,6 +109,7 @@ class LedgerConfig(_S):
     evaluation: Evaluation
     costs: Costs
     stress: list[Scenario] = Field(min_length=1)
+    harshest_scenario: str
     reconciliation: Reconciliation
     snapshots: Snapshots
     report: Report
@@ -83,13 +117,16 @@ class LedgerConfig(_S):
 
     @model_validator(mode="after")
     def _base_scenario(self):
-        if not any(s.name == "base" for s in self.stress):
+        names = [s.name for s in self.stress]
+        if "base" not in names:
             raise ValueError("the stress list must include a scenario named 'base'")
+        if self.harshest_scenario not in names:
+            raise ValueError("harshest_scenario must name a scenario in the stress list")
         return self
 
     @property
     def config_hash(self) -> str:
-        blob = json.dumps(self.model_dump(), sort_keys=True, separators=(",", ":"))
+        blob = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(blob.encode()).hexdigest()
 
 

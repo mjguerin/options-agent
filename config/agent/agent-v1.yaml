@@ -7,7 +7,7 @@
 # snapshot ("the view") that the owner's account publishes after the close. The narrative job
 # never touches the engine: if it fails or is slow, trading is not affected (AG-09).
 
-version: agent-v1-draft
+version: agent-v1
 
 host:
   os_user: mgagent                   # the agent's macOS account (must exist; no admin rights)
@@ -43,9 +43,12 @@ narrative:
   prompt_file: config/agent/narrative-prompt-v1.md
   allowed_tools: [Read, Grep, Glob]  # read the view only: no shell, no network, no writes
   disallowed_tools: [Bash, Write, Edit, NotebookEdit, WebFetch, WebSearch, Task]
-  output_format: stream-json         # every tool call is logged (AG-08)
+  output_format: stream-json         # every tool call is logged (AG-08) and audited (audit_file)
+  audit_file: audit/agent-audit.jsonl   # under shared_root: one line per attempted tool call
   min_words: 80                      # shorter output is treated as a failure, not published
 
-interactive:                         # settings for the owner's own sessions as the agent user
-  allowed_tools: [Read, Grep, Glob, "Bash(psql:*)"]
-  disallowed_tools: [Write, Edit, NotebookEdit, WebFetch, WebSearch]
+interactive:                         # the owner's own sessions as the agent user (AC-13)
+  # No shell: psql can run shell commands, so Bash is off. Questions are answered from the view
+  # (ledgers, facts, specs, code). Database access for analysis is a separate, audited tool.
+  allowed_tools: [Read, Grep, Glob]
+  disallowed_tools: [Bash, Write, Edit, NotebookEdit, WebFetch, WebSearch, Task]

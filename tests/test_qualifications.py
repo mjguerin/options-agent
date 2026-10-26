@@ -276,3 +276,32 @@ def test_the_nightly_report_with_thin_data_is_a_failure(tmp_path):
     )
     f = check_nightly(d, tmp_path, d)[0]
     assert f.active and "1 too thin" in f.detail
+
+
+# ---- D-81: an equity point when something changes, not only on the clock ----------------------
+
+
+def test_a_change_in_realized_result_adds_an_equity_point_between_the_interval_points(tmp_path):
+    from test_api import CFG as API_CFG
+
+    from tournament.live.controls import ControlPlane
+
+    rt, _, _ = build()
+    stub = type("S", (), {})()
+    stub.health = type("H", (), {"connected": True})()
+    stub.day = type("D", (), {"session_date": date(2026, 10, 26)})()
+    stub.builder = type("B", (), {"finalized": 1})()
+    plane = ControlPlane(None, API_CFG, {rt.binding: rt}, tmp_path / "s.json", stub, "shadow")
+
+    def rows():
+        f = tmp_path / "state_history" / "2026-10-26.jsonl"
+        return [json.loads(x) for x in f.read_text().splitlines()]
+
+    plane.tick(t_at(0))  # the first point, on the clock
+    plane.tick(t_at(6))  # nothing moved, and the 30 s interval is not due
+    assert [r["trigger"] for r in rows()] == ["interval"]
+    rt.realized_pnl = lambda: 12.5  # a fill closes a trade
+    plane.tick(t_at(12))
+    assert [r["trigger"] for r in rows()] == ["interval", "change"]
+    plane.tick(t_at(18))  # unchanged again: no new point
+    assert len(rows()) == 2

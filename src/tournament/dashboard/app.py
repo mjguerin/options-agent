@@ -205,9 +205,11 @@ def page_research(b, status: dict) -> None:
     table = data.cumulative(ledgers)
     st.subheader("All sessions so far")
     st.dataframe(table, hide_index=True, use_container_width=True)
+    label = ledgers[-1]["summary"].get("result_label", "gross of unmodeled costs")
     st.caption(
-        "Net P&L is the evaluation ledger (every account re-priced the same way) plus open "
-        "positions at their bid. Outages and incidents are shown, never excluded."
+        f"Results are {label}. Net P&L is the evaluation ledger (every account priced against "
+        "its own decision quotes the same way) plus open positions at a fresh bid. Outages and "
+        "incidents are shown, never excluded. Shadow results are development observations."
     )
     last = max(b_["summary"]["session_date"] for b_ in ledgers)
     ranking = data.read_json(
@@ -221,13 +223,15 @@ def page_research(b, status: dict) -> None:
                 "account": r["account"],
                 "net P&L est $": r["net_pnl_est_usd"],
                 "promotion qualified": r["promotion_qualified"],
+                "not evaluable": ", ".join(r.get("not_evaluable", [])),
                 "note": "leads, but does not qualify" if r["leader_not_qualified"] else "",
             }
             for r in ranking
         ]
         st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
         st.caption(
-            "A gate with no threshold set is not evaluated. Gates are proposals, not approvals."
+            "Every gate is mandatory. A gate with no threshold, or one whose inputs are not yet "
+            "trustworthy, is not evaluable and blocks qualification."
         )
     acct = st.selectbox("Account", sorted({b_["summary"]["account"] for b_ in ledgers}))
     mine = [b_ for b_ in ledgers if b_["summary"]["account"] == acct][-1]
@@ -248,9 +252,11 @@ def page_research(b, status: dict) -> None:
                 "eval_exit", "broker_gross_usd", "eval_gross_usd", "fees_usd", "net_eval_usd",
                 "exit_reasons", "flags"]  # fmt: skip
         st.dataframe(trades[cols], hide_index=True, use_container_width=True)
+        name = mine.get("execution_ledger_name", "execution ledger")
         st.caption(
-            "Broker columns are what the broker side recorded. Evaluation columns re-price "
-            "the same trades the same way for every account."
+            f"The 'broker_*' columns come from the {name} (in shadow mode: modeled fills, not a "
+            "broker). Evaluation columns price the same executions against the quote held at "
+            "each decision, the same way for every account."
         )
     st.write(
         "**Reconciliation**", {k: v["ok"] for k, v in mine["reconciliation"]["checks"].items()}

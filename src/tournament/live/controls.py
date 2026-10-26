@@ -41,6 +41,8 @@ class ControlPlane:
         )
         self.engine = engine
         self._last_history: pd.Timestamp | None = None
+        self._last_signature: dict[str, tuple] = {}
+        self._last_change_check: pd.Timestamp | None = None
         self._last_poll: pd.Timestamp | None = None
         self._last_state: pd.Timestamp | None = None
         self.applied = 0
@@ -52,9 +54,11 @@ class ControlPlane:
             self._last_state = now
             self._publish(now)
         hist = pd.Timedelta(seconds=self.cfg.state.history_every_s)
-        if self._last_history is None or now - self._last_history >= hist:
+        due = self._last_history is None or now - self._last_history >= hist
+        changed = self.cfg.state.history_on_change and self._changed(now)
+        if due or changed:
             self._last_history = now
-            self._append_history(now)
+            self._append_history(now, "interval" if due else "change")
         poll = pd.Timedelta(seconds=self.cfg.commands.poll_s)
         if self.store is not None and (self._last_poll is None or now - self._last_poll >= poll):
             self._last_poll = now
@@ -184,13 +188,36 @@ class ControlPlane:
             }
         return out
 
-    def _append_history(self, now: pd.Timestamp) -> None:
-        """One line per interval: what the dashboard draws its curves from."""
+    @staticmethod
+    def _pnl_view(rt, now: pd.Timestamp) -> dict:
+        """Realized, estimated and conservative figures for one account, kept apart."""
+        return rt.guard.risk_view(rt.realized_pnl(), rt._open_positions(now))
+
+    def _changed(self, now: pd.Timestamp) -> bool:
+        """Did any account's positions or realized result move since the last look? Checked at
+        the state-publish cadence, so a fill is on the equity curve within a few seconds and the
+        drawdown does not wait for the next interval point."""
+        every = pd.Timedelta(seconds=self.cfg.state.every_s)
+        last = self._last_change_check
+        if last is not None and now - last < every:
+            return False
+        self._last_change_check = now
+        moved = False
+        for b, rt in self.runtimes.items():
+            sig = (tuple(sorted(rt.store.filled_by_symbol(b).items())), round(rt.realized_pnl(), 2))
+            if b in self._last_signature and self._last_signature[b] != sig:
+                moved = True
+            self._last_signature[b] = sig
+        return moved
+
+    def _append_history(self, now: pd.Timestamp, trigger: str = "interval") -> None:
+        """One line per point: what the dashboard and the equity metrics are drawn from."""
         try:
             d = self.state_file.parent / "state_history"
             d.mkdir(parents=True, exist_ok=True)
             row = {
                 "at": now.isoformat(),
+                "trigger": trigger,
                 "accounts": {
                     b: {
                         "realized_pnl_usd": round(rt.realized_pnl(), 2),
@@ -198,7 +225,7 @@ class ControlPlane:
                             sum(p["unrealized_usd"] or 0.0 for p in rt.positions_detail(now)), 2
                         ),
                         "exposure_usd": round(rt.ledger.exposure_usd(b), 2),
-                        "risk_pnl_usd": self._pnl_view(rt, now)["risk_usd"],
+                        "risk_pnl_usd": round(self._pnl_view(rt, now)["risk_usd"], 2),
                         "unmarked": self._pnl_view(rt, now)["unmarked_positions"],
                     }
                     for b, rt in self.runtimes.items()

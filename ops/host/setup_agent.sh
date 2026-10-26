@@ -59,7 +59,8 @@ fi
 
 step "Shared folders"
 install -d -o "$OWNER" -g staff -m 755 "$SHARED"
-install -d -o "$AGENT" -g staff -m 755 "$OUT" "$LOGS"
+AUDIT_DIR="$(dirname "$(cfg 'c.audit_path')")"
+install -d -o "$AGENT" -g staff -m 755 "$OUT" "$LOGS" "$AUDIT_DIR"
 as_owner mkdir -p "$OWNER_HOME/Library/Logs/options-tournament"
 echo "  $SHARED (owner writes the view; the agent writes narratives and logs)"
 

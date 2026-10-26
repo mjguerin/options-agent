@@ -1,13 +1,16 @@
 """Building the two ledgers for one account from its orders (BRD 12.3; AC-11).
 
-The broker ledger is what the broker side recorded: each order's filled quantity and average price,
-the cash those fills moved, and the positions left. The evaluation ledger re-prices the same
-trades under one declared set of assumptions: buy at the ask quoted when the entry was decided,
-sell at the bid quoted when the exit was decided, a configured number of ticks worse, and the
-configured per-contract costs. Every competitor is priced the same way, so a result reflects its
-decisions and not a lucky or unlucky fill. The two are never netted into each other: both are
-reported, with the difference, and a trade with no usable quote is flagged rather than priced from
-thin air.
+The execution ledger is what the execution side recorded: each order's filled quantity and average
+price, the cash those fills moved, and the positions left. In shadow mode that is the modeled
+execution; only paper execution produces a broker ledger (D-79). The evaluation ledger re-prices
+the same executions against a benchmark: the ask the application held when each entry was
+decided, the bid when each exit was decided, a configured number of ticks worse, and the
+configured per-contract costs (D-80). It is a signal-price benchmark, not an executable-fill
+assumption, and it measures sensitivity of these trades only: it does not replay how other fills
+would have changed buying power or later eligibility. Every competitor is priced the same way. The
+two ledgers are never netted into each other: both are reported, with the difference, and a
+decision with no usable quote is flagged rather than priced from thin air. Each quantity maps to
+the decision that produced it, and the quote's own times, sizes and quality travel with it.
 """
 
 from __future__ import annotations
@@ -58,6 +61,8 @@ class Trade:
     fees_usd: float
     net_eval_usd: float
     stress_net_usd: dict[str, float] = field(default_factory=dict)
+    entry_benchmark: list[dict] = field(default_factory=list)
+    exit_benchmark: list[dict] = field(default_factory=list)
     holding_s: float | None = None
     premium_usd: float = 0.0  # entry notional
     exit_reasons: list[str] = field(default_factory=list)
@@ -78,11 +83,64 @@ def _fill_time(store: IntentStore, order: Intent) -> pd.Timestamp | None:
     return order.submitted_at
 
 
-def _decision_quote(store: IntentStore, order: Intent) -> tuple[float | None, float | None]:
+def _decision_quote(store: IntentStore, order: Intent) -> dict:
+    """The quote and provenance recorded when this order's decision was made."""
     for _, kind, detail in store.event_rows(order.client_order_id):
-        if kind == "intent":
-            return detail.get("bid"), detail.get("ask")
-    return None, None
+        if kind == "intent" and "bid" in detail:
+            return {
+                "bid": detail.get("bid"),
+                "ask": detail.get("ask"),
+                "decision_at": detail.get("decision_at"),
+                "quote": detail.get("quote") or {},
+            }
+    return {"bid": None, "ask": None, "decision_at": None, "quote": {}}
+
+
+def _origin(store: IntentStore, order: Intent, by_id: dict[str, Intent]) -> Intent:
+    """The order a decision started with: a replacement is the same decision as its parent."""
+    seen = {order.client_order_id}
+    while order.parent_client_order_id and order.parent_client_order_id in by_id:
+        order = by_id[order.parent_client_order_id]
+        if order.client_order_id in seen:
+            break
+        seen.add(order.client_order_id)
+    return order
+
+
+def _benchmarks(
+    store: IntentStore, orders: list[Intent], by_id: dict[str, Intent], cfg: LedgerConfig, buy: bool
+) -> tuple[list[dict], float, bool]:
+    """One record per filled order: its quantity, the decision quote it maps to, the price the
+    benchmark gives it. Returns (records, quantity-weighted benchmark price, any missing)."""
+    ev = cfg.evaluation
+    out, qty, cost, missing = [], 0, 0.0, False
+    for o in sorted(orders, key=lambda o: o.created_at):
+        if o.qty_filled <= 0:
+            continue
+        dq = _decision_quote(store, _origin(store, o, by_id))
+        if buy:
+            price = _evaluated(ev.entry_price, dq["bid"], dq["ask"], ev.entry_slippage_ticks,
+                               ev.tick_size, True)  # fmt: skip
+        else:
+            price = _evaluated(ev.exit_price, dq["bid"], dq["ask"], ev.exit_slippage_ticks,
+                               ev.tick_size, False)  # fmt: skip
+        out.append(
+            {
+                "client_order_id": o.client_order_id,
+                "quantity": o.qty_filled,
+                "decision_at": dq["decision_at"],
+                "bid": dq["bid"],
+                "ask": dq["ask"],
+                "benchmark_price": price,
+                "quote": dq["quote"],
+            }
+        )
+        if price is None:
+            missing = True
+        else:
+            qty += o.qty_filled
+            cost += o.qty_filled * price
+    return out, (cost / qty if qty else None), missing
 
 
 def _avg(orders: list[Intent]) -> tuple[int, float]:
@@ -120,11 +178,16 @@ def _evaluated(price_side: str, bid, ask, slip_ticks: float, tick: float, buy: b
     return None if base is None or base <= 0 else max(base - slip_ticks * tick, 0.0)
 
 
-def build_trades(store: IntentStore, account: str, cfg: LedgerConfig) -> list[Trade]:
+def build_trades(
+    store: IntentStore, account: str, cfg: LedgerConfig, day: str | None = None
+) -> list[Trade]:
     ev, mult = cfg.evaluation, cfg.evaluation.contract_multiplier
-    per_contract = cfg.costs.commission_per_contract + cfg.costs.regulatory_fee_per_contract
+    rate = cfg.costs.rate_on(day)
+    per_contract = rate.commission_per_contract + rate.regulatory_fee_per_contract
+    all_orders = store.all_for(account)
+    by_id = {o.client_order_id: o for o in all_orders}
     by_candidate: dict[str, list[Intent]] = {}
-    for o in store.all_for(account):
+    for o in all_orders:
         by_candidate.setdefault(o.candidate_id, []).append(o)
     trades = []
     for cid, orders in by_candidate.items():
@@ -132,28 +195,23 @@ def build_trades(store: IntentStore, account: str, cfg: LedgerConfig) -> list[Tr
         if not entries:
             continue  # nothing bought: a decision that never became a position
         exits = [o for o in orders if o.purpose is Purpose.EXIT and o.qty_filled > 0]
-        all_exit_orders = [o for o in orders if o.purpose is Purpose.EXIT]
         q_in, p_in = _avg(entries)
         q_out, p_out = _avg(exits)
         closed = min(q_in, q_out)
         flags: list[str] = []
-        ebid, eask = _decision_quote(store, min(entries, key=lambda o: o.created_at))
-        e_entry = _evaluated(
-            ev.entry_price, ebid, eask, ev.entry_slippage_ticks, ev.tick_size, True
-        )
-        if e_entry is None:
+        entry_rec, e_entry, entry_missing = _benchmarks(store, entries, by_id, cfg, True)
+        if entry_missing:
             flags.append(NO_ENTRY_QUOTE)
-            e_entry = p_in if ev.missing_quote == "flag_and_use_broker" else None
+        if e_entry is None and ev.missing_quote == "flag_and_use_broker":
+            e_entry = p_in  # flagged above: the execution price, never an invented quote
+        exit_rec: list[dict] = []
         e_exit = None
         if closed:
-            first_exit = min(all_exit_orders, key=lambda o: o.created_at)
-            xbid, xask = _decision_quote(store, first_exit)
-            e_exit = _evaluated(
-                ev.exit_price, xbid, xask, ev.exit_slippage_ticks, ev.tick_size, False
-            )
-            if e_exit is None:
+            exit_rec, e_exit, exit_missing = _benchmarks(store, exits, by_id, cfg, False)
+            if exit_missing:
                 flags.append(NO_EXIT_QUOTE)
-                e_exit = p_out if ev.missing_quote == "flag_and_use_broker" else None
+                if e_exit is None and ev.missing_quote == "flag_and_use_broker":
+                    e_exit = p_out
         if closed < q_in:
             flags.append(OPEN_AT_END)
         entry_at = min(
@@ -164,27 +222,19 @@ def build_trades(store: IntentStore, account: str, cfg: LedgerConfig) -> list[Tr
         )
         occ = parse_occ(entries[0].symbol)
         broker_gross = (p_out - p_in) * closed * mult if closed else 0.0
-        eval_gross = (
-            ((e_exit - e_entry) * closed * mult)
-            if (closed and e_entry is not None and e_exit is not None)
-            else 0.0
-        )
+        priced = closed and e_entry is not None and e_exit is not None
+        eval_gross = ((e_exit - e_entry) * closed * mult) if priced else 0.0
         fees = per_contract * (q_in + q_out)
         stress = {}
         for sc in cfg.stress:
-            if closed and e_entry is not None and e_exit is not None:
-                gross = (
-                    (
-                        (e_exit - sc.extra_slippage_ticks * ev.tick_size)
-                        - (e_entry + sc.extra_slippage_ticks * ev.tick_size)
-                    )
-                    * closed
-                    * mult
-                )
+            if priced:
+                sold = max(e_exit - sc.extra_slippage_ticks * ev.tick_size, 0.0)  # floor at zero
+                bought = e_entry + sc.extra_slippage_ticks * ev.tick_size
+                gross = (sold - bought) * closed * mult
             else:
                 gross = 0.0
             stress[sc.name] = gross - fees * sc.fee_multiplier
-        reasons = sorted({r for o in all_exit_orders for r in o.reasons})
+        reasons = sorted({r for o in orders if o.purpose is Purpose.EXIT for r in o.reasons})
         timed = entry_at is not None and exit_at is not None and closed
         trades.append(
             Trade(
@@ -206,6 +256,8 @@ def build_trades(store: IntentStore, account: str, cfg: LedgerConfig) -> list[Tr
                 fees_usd=fees,
                 net_eval_usd=eval_gross - fees,
                 stress_net_usd=stress,
+                entry_benchmark=entry_rec,
+                exit_benchmark=exit_rec,
                 holding_s=(exit_at - entry_at).total_seconds() if timed else None,
                 premium_usd=q_in * p_in * mult,
                 exit_reasons=reasons,

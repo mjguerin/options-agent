@@ -57,6 +57,7 @@ class OrderManager:
         cfg: OrdersConfig,
         sleep: Callable[[float], None] = time.sleep,
         quotes: Callable[[str, pd.Timestamp], tuple[float | None, float | None]] | None = None,
+        quote_detail: Callable[[str, pd.Timestamp], dict] | None = None,
     ) -> None:
         self.account, self.broker, self.store, self.cfg, self.sleep = (
             account,
@@ -68,6 +69,8 @@ class OrderManager:
         self.entries_blocked: str | None = None
         # a usable (bid, ask) for a contract at a time, or (None, None); how exits are re-priced
         self.quotes = quotes or (lambda symbol, now: (None, None))
+        # the provenance of that quote (times, sizes, quality), recorded with the decision (D-80)
+        self.quote_detail = quote_detail or (lambda symbol, now: {})
         # exits waiting for a usable bid: symbol -> {since, candidate_id, strategy_id, reasons}
         self.blind: dict[str, dict] = {}
 
@@ -140,6 +143,8 @@ class OrderManager:
             limit=intent.limit_price,
             bid=bid,
             ask=ask,
+            decision_at=now.isoformat(),
+            quote=self.quote_detail(symbol, now),
         )
         return self._send(intent, now)
 
@@ -241,6 +246,8 @@ class OrderManager:
             order_type=order_type,
             bid=bid if usable else None,
             ask=ask if usable else None,
+            decision_at=now.isoformat(),
+            quote=self.quote_detail(symbol, now) if usable else {},
         )
         return self._send(intent, now)
 

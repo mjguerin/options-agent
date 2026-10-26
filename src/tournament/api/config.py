@@ -45,6 +45,7 @@ class State(_S):
     file: str
     every_s: float = Field(gt=0)
     history_every_s: float = Field(gt=0)
+    history_on_change: bool
     recent_decisions: int = Field(ge=1)
     max_age_s: float = Field(gt=0)
 

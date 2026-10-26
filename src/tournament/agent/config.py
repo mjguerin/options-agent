@@ -98,6 +98,7 @@ class Narrative(_S):
     allowed_tools: list[str]
     disallowed_tools: list[str]
     output_format: str
+    audit_file: str
     min_words: int = Field(ge=0)
 
     @field_validator("start_time")
@@ -105,6 +106,13 @@ class Narrative(_S):
     def _hhmm(cls, v: str) -> str:
         if not HHMM.match(v):
             raise ValueError("expected HH:MM")
+        return v
+
+    @field_validator("audit_file")
+    @classmethod
+    def _relative(cls, v: str) -> str:
+        if v.startswith("/") or ".." in Path(v).parts:
+            raise ValueError("must be a relative path under shared_root")
         return v
 
 
@@ -127,6 +135,10 @@ class AgentConfig(_S):
 
     def shared(self, which: str) -> Path:
         return Path(self.host.shared_root) / getattr(self.host, which)
+
+    @property
+    def audit_path(self) -> Path:
+        return Path(self.host.shared_root) / self.narrative.audit_file
 
 
 def load_agent_config(path: Path | str | None = None) -> AgentConfig:

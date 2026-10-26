@@ -31,6 +31,7 @@ def load_equity(path: Path, account: str) -> pd.DataFrame:
                     "estimated_usd": a["realized_pnl_usd"] + a["unrealized_usd"],
                     "risk_usd": a.get("risk_pnl_usd"),
                     "exposure_usd": a["exposure_usd"],
+                    "unmarked": a.get("unmarked", 0),
                 }
             )
     except (OSError, ValueError, KeyError):
@@ -93,7 +94,9 @@ def reconcile(
         "broker_vs_evaluation": {
             "trades": gap,
             "total_difference_usd": sum(g["difference_usd"] for g in gap),
-            "cause": "fill price against the quote at the decision, plus the configured slippage",
+            "expected": True,  # a repricing difference is expected, not a reconciliation failure
+            "cause": "execution price against the quote at the decision, plus the configured "
+            "slippage",
         },
     }
 
@@ -110,10 +113,12 @@ def build_session_ledger(
     open_marks: list[dict],
     equity: pd.DataFrame,
     operational: dict,
+    execution_source: str = "modeled",
+    revision_note: str | None = None,
 ) -> dict:
     mult = cfg.evaluation.contract_multiplier
     fills = broker_fills(store, account, mult)
-    trades = build_trades(store, account, cfg)
+    trades = build_trades(store, account, cfg, session_date)
     rec = reconcile(fills, trades, store, account, start_equity, broker_cash, broker_positions, cfg)
     td = [t.as_dict() for t in trades]
     est_open = sum(m["unrealized_usd"] or 0.0 for m in open_marks)
@@ -126,6 +131,7 @@ def build_session_ledger(
         for m in open_marks
     )
     net_realized = sum(t.net_eval_usd for t in trades if t.closed_qty)
+    unmarked = sum(1 for m in open_marks if m["unrealized_usd"] is None)
     summary = {
         "session_date": session_date,
         "account": account,
@@ -134,11 +140,18 @@ def build_session_ledger(
         "broker_realized_gross_usd": sum(t.broker_gross_usd for t in trades),
         "eval_realized_gross_usd": sum(t.eval_gross_usd for t in trades if t.closed_qty),
         "fees_usd": sum(t.fees_usd for t in trades),
+        "fees_estimated_usd": sum(t.fees_usd for t in trades),  # accrual from the schedule
+        "posted_charges_usd": None,  # what the broker actually posted: none exist in shadow
+        "cost_status": cfg.costs.status,
+        "result_label": cfg.costs.label,
         "net_realized_eval_usd": net_realized,
         "open_positions": open_marks,
         "open_estimate_usd": est_open,
         "open_risk_usd": risk_open,
-        "unmarked_positions": sum(1 for m in open_marks if m["unrealized_usd"] is None),
+        "unmarked_positions": unmarked,
+        # the primary valuation marks only what has a fresh usable bid; a position without one is
+        # not marked at all, and the figure says so instead of carrying a stale or invented mark
+        "primary_valuation_complete": unmarked == 0,
         "net_pnl_est_usd": net_realized + est_open,
         "net_pnl_risk_usd": net_realized + risk_open,
         "stress_net_usd": {
@@ -149,7 +162,7 @@ def build_session_ledger(
     }
     metrics = {
         **trade_metrics(td, cfg, start_equity),
-        **equity_metrics(equity, start_equity),
+        **equity_metrics(equity, start_equity, cfg.snapshots.interval_s),
         **daily_metrics([summary], start_equity),
     }
     eq_records = (
@@ -161,6 +174,11 @@ def build_session_ledger(
         ]
     )
     body = {
+        "execution_source": execution_source,  # "modeled" in shadow; "broker" once paper trades
+        "execution_ledger_name": (
+            "modeled-execution ledger" if execution_source == "modeled" else "broker ledger"
+        ),
+        "revision_note": revision_note,  # why a correction exists, with its provenance (D-82)
         "summary": summary,
         "metrics": metrics,
         "reconciliation": rec,

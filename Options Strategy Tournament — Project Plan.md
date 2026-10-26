@@ -112,7 +112,7 @@ Goal: prove isolation, risk, execution and accounting on real paper fills with t
 
 - [x] Set the per-trade risk budget and daily loss limit (D07); review which SPY deltas that budget allows (initial values Oct 26, 2026: 20% premium budget, 20% premium stop, $500 daily limit, in config/risk/risk-v1.yaml; the budget allows ATM 0DTE, about 13 contracts at 1.44. Changing them is a new version)
 - [x] Set the expiration and delta policy from that budget (D06) (initial rule: 0DTE, nearest-ATM strike, one contract tried, quantity from the budget; D-57. Revisit after the first shadow weeks)
-- [ ] Approve order types, timeouts and replacement limits (D08) (initial values drafted Oct 26, 2026 in config/orders/orders-v1.yaml, awaiting the owner's approval)
+- [x] Approve order types, timeouts and replacement limits (D08) (agreed Oct 26, 2026 as orders-v1 with the full safety semantics, D-60 to D-62)
 - [ ] Create two $10,000 paper accounts for two of the five candidates (FR-13)
 - [ ] Run one to two weeks in shadow, then switch to paper
 - [ ] Measure latency budgets for feed, candidate, submission and exit (NFR-02)
@@ -128,7 +128,7 @@ Goal: all five candidates trade paper on independent accounts under one frozen m
 - [ ] Close D02: second Alpaca login, staged rollout, or an approved internal-ledger scope change
 - [ ] Create the remaining $10,000 paper accounts and bind one per strategy (FR-01)
 - [ ] Approve the evaluation and confirmation periods and the statistical decision policy before starting (D09)
-- [ ] Approve the cost model, marking rules and outage-exclusion rules (D10)
+- [ ] Approve the cost model, marking rules and outage-exclusion rules (D10) (structure, marking and outage policy agreed Oct 26, 2026, D-80 and D-88; still open: verify the account's commission and the current regulatory fee rates, then set cost status to approved)
 - [ ] Freeze the manifest and tag the release; no code changes during the evaluation period
 - [ ] Confirm all five workers run within measured resource and latency budgets (AC-19)
 

@@ -19,6 +19,9 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import audit  # noqa: E402
+
 
 def final_text(stream: str) -> str | None:
     """The model's answer: the last `result` event of the stream-json log."""
@@ -35,6 +38,11 @@ def final_text(stream: str) -> str | None:
 
 def run(a: argparse.Namespace) -> int:
     view, out, logs = Path(a.view), Path(a.out), Path(a.logs)
+    # first, whatever happens next: record the owner's interactive sessions' tool calls (AC-13)
+    audit.sweep_transcripts(
+        Path(a.transcripts).expanduser(), logs / "audit-sweep-state.json", Path(a.audit),
+        "interactive-session",
+    )  # fmt: skip
     day = a.date or datetime.now(ZoneInfo(a.tz)).date().isoformat()
     facts_path = view / "facts" / f"{day}.json"
     if not facts_path.exists():
@@ -64,6 +72,8 @@ def run(a: argparse.Namespace) -> int:
         print(f"timed out after {a.timeout}s", file=sys.stderr)
         return 3
     log.write_text(done.stdout)
+    audit_file = Path(a.audit)
+    audit.append(audit_file, audit.records(done.stdout.splitlines(), "narrative-job", day))
     text = final_text(done.stdout) if a.output_format == "stream-json" else done.stdout
     if done.returncode != 0 or not text or len(text.split()) < a.min_words:
         print(
@@ -103,6 +113,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--min-words", type=int, required=True)
     p.add_argument("--allowed", nargs="+", required=True)
     p.add_argument("--disallowed", nargs="+", required=True)
+    p.add_argument("--audit", required=True)
+    p.add_argument("--transcripts", required=True)
     p.add_argument("--config-hash", required=True)
     p.add_argument("--tz", required=True)
     p.add_argument("--date", default=None)

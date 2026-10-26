@@ -1,6 +1,6 @@
 # Step 3 gate: acceptance criteria in shadow mode (AC-01..16, AC-21..24)
 
-Written Oct 26, 2026. "Test" means an automated test that passes today (580 pass, 2 network
+Written Oct 26, 2026. "Test" means an automated test that passes today (608 pass, 2 network
 skips). "Host" means checked on the installed mini. "Live" means it needs a real session: a
 shadow day on the installed jobs. Nothing below is marked passed on a claim; each row names its evidence.
 
@@ -18,7 +18,7 @@ shadow day on the installed jobs. Nothing below is marked passed on a claim; eac
 | 10 Versioning | A parameter change makes a new immutable version | Test: `a_manifest_is_immutable_and_approval_changes_nothing_else`; ledger revisions append; config hashes pinned | None | Covered |
 | 11 Accounting | Synthetic fixtures reconcile to independent values | Test: `the_books_reconcile_to_the_cent` and the hand-computed ledger fixtures | Live: the first real ledger must reconcile | Covered; live pending |
 | 12 Comparison | An unprofitable leader leads but is not qualified | Test: `an_unprofitable_leader_leads_but_is_not_promotion_qualified` | Promotion thresholds are unset (owner decision) | Covered |
-| 13 Agent permissions | Order, credential and settings attempts are denied and logged | Host: verify_agent.sh (no .env, no DB writes, no view writes) passed; a live headless and a Remote Control session both refused writes and found no .env | Denials are logged for the narrative job (stream-json) but not for owner-driven sessions | Partial: decide whether interactive denials must be logged |
+| 13 Agent permissions | Order, credential and settings attempts are denied and logged | Host: verify_agent.sh (no .env, no DB writes, no view writes) passed; a live headless and a Remote Control session both refused writes and found no .env | Run `sudo ops/host/verify_agent_tools.sh` once (needs the agent signed in) and keep its output | Covered by D-89: both paths have no shell or write tools and every attempted call is audited; negative tests written and tested with a fake model, not yet run against the real one |
 | 14 Agent independence | Trading continues if the agent is down | Test: `test_the_trading_code_never_imports_the_agent` (added with this file); the agent has its own jobs and account | Live: stop the agent jobs during a session and confirm nothing changes | Covered statically; live pending |
 | 15 Paper-only | Live endpoint or credential configs fail startup | Test: alpaca_adapter `live_endpoint_rejected`; secrets `a_live_looking_key_is_rejected`; feed guards | Check that a live-key pattern in `.env` also fails | Partial: check the credential side |
 | 16 Controls | Pause, cancel, flatten, resume are distinct and audited | Test: the api suite (queue, confirmation, audit, expiry), account_runtime pause and flatten, breakglass | Live: a pause and resume through the dashboard | Covered; live pending |
@@ -29,7 +29,7 @@ shadow day on the installed jobs. Nothing below is marked passed on a claim; eac
 
 ## Open items before the gate
 
-1. AC-13: decide whether owner-driven agent sessions need denial logging.
+1. AC-13: run `verify_agent_tools.sh` and keep the result.
 2. Live drills during the first shadow days: a deliberate engine kill (AC-09), stopping the
    agent jobs (AC-14), one dashboard pause and resume (AC-16), and the first real ledger (AC-11).
 3. Rerun the Step 2 gate on the release commit.

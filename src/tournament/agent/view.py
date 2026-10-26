@@ -77,7 +77,12 @@ def _live(root: Path, repo: Path, dest: Path, cfg: AgentConfig, skipped: list[st
 
 
 def publish_view(
-    repo: Path, cfg: AgentConfig, dest: Path, facts_dir: Path | None, live_root: Path
+    repo: Path,
+    cfg: AgentConfig,
+    dest: Path,
+    facts_dir: Path | None,
+    live_root: Path,
+    version: dict | None = None,
 ) -> dict:
     """Build the view in a sibling folder, scan it, then swap it in. Returns the manifest."""
     stage = dest.with_name(dest.name + ".new")
@@ -106,10 +111,18 @@ def publish_view(
             shutil.rmtree(stage, ignore_errors=True)
             raise SecretLeak(f"a .env value appears in {f.relative_to(stage)}; view not published")
 
+    facts_hashes = {}
+    for f in sorted((facts_dir or Path("/nonexistent")).glob("*.json")):
+        try:
+            facts_hashes[f.stem] = json.loads(f.read_text()).get("content_hash")
+        except (OSError, ValueError):
+            continue
     manifest = {
         "agent_config_hash": cfg.config_hash,
         "files": len(copied),
         "skipped_too_large": sorted(skipped),
+        "facts_content_hashes": facts_hashes,
+        **(version or {}),  # git commit, whether the tree was dirty, when it was published
     }
     (stage / "VIEW_MANIFEST.json").write_text(json.dumps(manifest, indent=1, sort_keys=True))
     # Readable by the agent, writable by nobody but the owner.
@@ -123,4 +136,7 @@ def publish_view(
         dest.rename(old)
     stage.rename(dest)
     shutil.rmtree(old, ignore_errors=True)
+    # Each published view leaves a line behind, so what the agent saw on any day can be identified.
+    with (dest.parent / "view-history.jsonl").open("a") as h:
+        h.write(json.dumps(manifest, sort_keys=True) + "\n")
     return manifest

@@ -30,6 +30,8 @@ def narrative_args(cfg: AgentConfig, tz: str) -> list[str]:
         "--model", n.model, "--max-turns", str(n.max_turns), "--timeout", str(n.timeout_s),
         "--prompt-file", n.prompt_file, "--output-format", n.output_format,
         "--min-words", str(n.min_words), "--config-hash", cfg.config_hash, "--tz", tz,
+        "--audit", str(cfg.audit_path),
+        "--transcripts", f"/Users/{cfg.host.os_user}/.claude/projects",
         "--allowed", *n.allowed_tools, "--disallowed", *n.disallowed_tools,
     ]  # fmt: skip
 

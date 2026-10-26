@@ -16,7 +16,7 @@ from tournament.accounts.runtime import AccountRouter, AccountRuntime, WrongAcco
 from tournament.live.quotes import OptionFeed, usable_touch
 from tournament.orders.config import load_orders_config
 from tournament.orders.manager import OrderManager
-from tournament.orders.model import Purpose, Status
+from tournament.orders.model import Intent, Purpose, Status
 from tournament.orders.sim import SimBroker
 from tournament.orders.store import IntentStore, memory_engine
 from tournament.risk.config import DEFAULT_PATH, load_risk_config
@@ -248,6 +248,22 @@ def test_a_claim_that_never_became_an_order_lapses_and_an_unfilled_one_is_releas
     assert len(ledger.held("acct:vpc")) == 1
     ledger.refresh(at(61), "acct:vpc", store)  # ttl 60 s
     assert ledger.held("acct:vpc") == []
+
+
+def test_exposure_is_not_released_merely_because_a_cancel_was_requested():  # D-61, D08
+    ledger = ReservationLedger(memory_engine(), RISK.limits, 100)
+    store = IntentStore(memory_engine())
+    ledger.reserve(T0, "acct:vpc", "c1", 1500.0, 10, 10_000.0)
+    entry = Intent(
+        "e1", "acct:vpc", "c1", "vpc", Purpose.ENTRY, "buy", CALL, 10, "limit", 1.5, "day",
+        Status.CANCEL_REQUESTED, T0, submitted_at=T0,
+    )  # fmt: skip
+    store.insert(entry)
+    ledger.refresh(at(10), "acct:vpc", store)
+    assert len(ledger.held("acct:vpc")) == 1  # a requested cancel is not a confirmed cancel
+    store.save(entry.with_(status=Status.CANCELED))
+    ledger.refresh(at(11), "acct:vpc", store)
+    assert ledger.held("acct:vpc") == []  # released only once the order is terminal
 
 
 # ---- the position loop (EX-01 to EX-05, D-33, D-34) --------------------------------------------

@@ -249,6 +249,8 @@ def job(tmp_path):
              "--claude", str(claude), "--model", "sonnet", "--max-turns", "3", "--timeout", "30",
              "--prompt-file", "config/agent/p.md", "--output-format", "stream-json",
              "--min-words", "80", "--config-hash", "abc", "--tz", "America/New_York",
+             "--audit", str(tmp_path / "audit" / "a.jsonl"),
+             "--transcripts", str(tmp_path / "projects"),
              "--date", day, "--allowed", "Read", "Grep", "--disallowed", "Bash", "Write"]
         )  # fmt: skip
 
@@ -314,7 +316,7 @@ def test_the_host_files_render_complete_and_valid(tmp_path):
     assert "<string>mgmini</string>" in view_job and "<string>publish</string>" in view_job
     settings = json.loads((tmp_path / "claude-settings.json").read_text())
     assert "Write" in settings["permissions"]["deny"]
-    assert "Bash(psql:*)" in settings["permissions"]["allow"]
+    assert "Bash" in settings["permissions"]["deny"] and "Bash(psql:*)" not in str(settings)
 
 
 def test_the_job_arguments_come_from_the_config():
@@ -342,3 +344,164 @@ def test_the_trading_code_never_imports_the_agent():  # AC-14
             continue
         text = f.read_text()
         assert "tournament.agent" not in text, f"{f.relative_to(src)} reaches the agent"
+
+
+# ---- audit, denial tests and the versioned view (AC-13, AG-08, D-84) --------------------------
+
+
+def load_module(name):
+    spec = importlib.util.spec_from_file_location(name, REPO / f"ops/agent/{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(REPO / "ops/agent"))
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def stream(*events):
+    return [json.dumps(e) for e in events]
+
+
+def tool_use(i, name, **inp):
+    item = {"type": "tool_use", "id": i, "name": name, "input": inp}
+    return {"type": "assistant", "message": {"content": [item]}}
+
+
+def tool_result(i, text, error=False):
+    item = {"type": "tool_result", "tool_use_id": i, "content": text, "is_error": error}
+    return {"type": "user", "message": {"content": [item]}}
+
+
+def test_every_attempted_call_is_audited_with_its_outcome_and_no_content():
+    audit = load_module("audit")
+    lines = stream(
+        tool_use("1", "Read", file_path="/v/specs/a.md"),
+        tool_result("1", "SECRET FILE CONTENT"),
+        tool_use("2", "Bash", command="touch /v/x"),
+        tool_result("2", "Permission to use Bash has been denied", error=True),
+        tool_use("3", "WebFetch", url="https://example.com/" + "a" * 500),
+        tool_result("3", "boom", error=True),
+        tool_use("4", "Grep", pattern="x"),
+    )
+    r = audit.records(lines, "narrative-job", "2026-10-26")
+    assert [(x["tool"], x["action_class"], x["outcome"]) for x in r] == [
+        ("Read", "read", "allowed"), ("Bash", "exec", "denied"),
+        ("WebFetch", "network", "error"), ("Grep", "search", "no_result"),
+    ]  # fmt: skip
+    assert r[1]["target"] == "touch /v/x" and "denied" in r[1]["reason"]
+    assert len(r[2]["target"]) <= 200
+    assert "SECRET" not in json.dumps(r)  # outputs are never copied into the audit
+    assert all(x["actor"] == "narrative-job" and x["at"] for x in r)
+
+
+def test_interactive_transcripts_are_swept_once_each(tmp_path):
+    audit = load_module("audit")
+    projects = tmp_path / "projects" / "p"
+    projects.mkdir(parents=True)
+    t = projects / "s1.jsonl"
+    t.write_text("\n".join(stream(tool_use("a", "Read", file_path="/v/x"), tool_result("a", "ok"))))
+    state, out = tmp_path / "state.json", tmp_path / "audit.jsonl"
+    assert audit.sweep_transcripts(tmp_path / "projects", state, out, "interactive-session") == 1
+    assert audit.sweep_transcripts(tmp_path / "projects", state, out, "interactive-session") == 0
+    t.write_text(
+        t.read_text() + "\n" + "\n".join(stream(tool_use("b", "Edit", file_path="/v/y"),
+                                                  tool_result("b", "not allowed", error=True)))
+    )  # fmt: skip
+    assert audit.sweep_transcripts(tmp_path / "projects", state, out, "interactive-session") == 1
+    rows = [json.loads(x) for x in out.read_text().splitlines()]
+    assert [r["outcome"] for r in rows] == ["allowed", "denied"]
+    assert {r["actor"] for r in rows} == {"interactive-session"}
+
+
+def test_the_narrative_job_writes_its_audit_trail(job):
+    tmp, args = job
+    assert load_runner().run(args()) == 0
+    # the fake claude issues no tool calls, so the audit exists only if there was something to log
+    assert not (tmp / "audit" / "a.jsonl").exists() or (tmp / "audit" / "a.jsonl").read_text() == ""
+
+
+def test_the_owners_interactive_sessions_have_no_shell_and_no_writes():
+    i = CFG.interactive
+    assert set(i.allowed_tools) <= {"Read", "Grep", "Glob"}
+    assert {"Bash", "Write", "Edit", "WebFetch", "WebSearch"} <= set(i.disallowed_tools)
+    assert "Bash" in CFG.narrative.disallowed_tools
+
+
+DENIAL_CLAUDE = """#!__PY__
+import json, os
+mode = os.environ["FAKE_MODE"]
+
+
+def use(i, name, **inp):
+    print(json.dumps({"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": i, "name": name, "input": inp}]}}))
+
+
+def result(i, text, error):
+    print(json.dumps({"type": "user", "message": {"content": [
+        {"type": "tool_result", "tool_use_id": i, "content": text, "is_error": error}]}}))
+
+
+if mode == "refuse":
+    print(json.dumps({"type": "result", "is_error": False, "result": "I will not."}))
+elif mode == "leak":
+    use("z", "Bash", command="x")
+    result("z", "ok", False)
+else:
+    for i, (name, inp) in enumerate([("Bash", {"command": "x"}), ("Write", {"file_path": "f"}),
+                                     ("WebFetch", {"url": "u"}), ("Read", {"file_path": "e"})]):
+        use(str(i), name, **inp)
+        result(str(i), "Permission denied", True)
+"""
+
+
+def denial_args(tmp_path, mode):
+    view = tmp_path / "view"
+    (view / "config" / "risk").mkdir(parents=True, exist_ok=True)
+    (view / "config" / "risk" / "risk-v1.yaml").write_text("loss_limit: 500\n")
+    claude = tmp_path / "claude"
+    claude.write_text(DENIAL_CLAUDE.replace("__PY__", sys.executable))
+    claude.chmod(0o755)
+    os.environ["FAKE_MODE"] = mode
+    return load_module("verify_denials").parser().parse_args(
+        ["--view", str(view), "--claude", str(claude), "--model", "sonnet", "--timeout", "30",
+         "--audit", str(tmp_path / "audit.jsonl"), "--owner-env", "/o/.env",
+         "--allowed", "Read", "Grep", "--disallowed", "Bash", "Write", "Edit", "WebFetch"]
+    )  # fmt: skip
+
+
+def test_the_negative_tests_pass_when_every_privileged_call_is_refused_and_audited(
+    tmp_path, capsys
+):
+    mod = load_module("verify_denials")
+    assert mod.run(denial_args(tmp_path, "denied")) == 0
+    out = capsys.readouterr().out
+    assert out.count("PASS") == 5 and "FAIL" not in out
+    rows = [json.loads(x) for x in (tmp_path / "audit.jsonl").read_text().splitlines()]
+    assert rows and {r["actor"] for r in rows} == {"denial-test"}
+    assert {r["outcome"] for r in rows} == {"denied"}
+
+
+def test_a_privileged_call_that_goes_through_fails_the_negative_tests(tmp_path, capsys):
+    assert load_module("verify_denials").run(denial_args(tmp_path, "leak")) == 1
+    assert "FAIL  run a shell command" in capsys.readouterr().out
+
+
+def test_a_model_that_only_declines_is_inconclusive_not_a_pass(tmp_path, capsys):
+    assert load_module("verify_denials").run(denial_args(tmp_path, "refuse")) == 0
+    out = capsys.readouterr().out
+    assert out.count("INCONCLUSIVE") == 5 and "PASS" not in out
+
+
+def test_each_published_view_is_versioned_and_leaves_a_history_line(tmp_path):
+    repo = make_repo(tmp_path)
+    dest = tmp_path / "shared" / "view"
+    version = {"git_commit": "abc123", "git_dirty": False, "published_at": "2026-10-26T21:00:00Z"}
+    facts = tmp_path / "facts"
+    facts.mkdir()
+    (facts / "2026-10-26.json").write_text(json.dumps({"content_hash": "h1"}))
+    m = publish_view(repo, CFG, dest, facts, repo / "data" / "live", version)
+    assert m["git_commit"] == "abc123" and m["facts_content_hashes"] == {"2026-10-26": "h1"}
+    publish_view(repo, CFG, dest, facts, repo / "data" / "live", {**version, "git_commit": "def"})
+    lines = (dest.parent / "view-history.jsonl").read_text().splitlines()
+    assert [json.loads(x)["git_commit"] for x in lines] == ["abc123", "def"]
+    assert json.loads((dest / "VIEW_MANIFEST.json").read_text())["git_commit"] == "def"
