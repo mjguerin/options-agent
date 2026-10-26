@@ -79,26 +79,61 @@ def check_nightly(due_date: date, ops_dir: Path) -> list[Finding]:
         s = json.loads(path.read_text())
     except (OSError, ValueError):
         return [Finding("NIGHTLY_FAILED", True, f"no report for {due_date}")]
-    if s.get("error") or s.get("missing"):
+    if s.get("error") or s.get("missing") or s.get("quality_issues"):
         gaps = len(s.get("missing") or {})
-        return [
-            Finding(
-                "NIGHTLY_FAILED",
-                True,
-                f"{due_date}: error={s.get('error')}, {gaps} sessions with gaps",
-            )
-        ]
+        thin = len(s.get("quality_issues") or {})
+        detail = f"{due_date}: error={s.get('error')}, {gaps} sessions with gaps, {thin} too thin"
+        return [Finding("NIGHTLY_FAILED", True, detail)]
     return [Finding("NIGHTLY_FAILED", False)]
 
 
 def check_backup(now: pd.Timestamp, log: Path, cfg: Watchdog) -> list[Finding]:
+    """The backup counts only if its own log says it succeeded: a log that was touched by a failed
+    run is not a backup. Success lines look like `2026-10-26T20:00:01Z backup: ok 14M`."""
     try:
-        age_h = (now.timestamp() - log.stat().st_mtime) / 3600
+        lines = log.read_text().splitlines()
     except OSError:
         return [Finding("BACKUP_STALE", True, f"no backup log at {log}")]
+    ok = [ln for ln in lines if " backup: ok" in ln]
+    if not ok:
+        return [Finding("BACKUP_STALE", True, "no successful backup in the log")]
+    try:
+        last = pd.Timestamp(ok[-1].split()[0])
+    except ValueError:
+        return [Finding("BACKUP_STALE", True, "the last success line has no readable time")]
+    age_h = (now - last).total_seconds() / 3600
     if age_h > cfg.backup_max_age_h:
-        return [Finding("BACKUP_STALE", True, f"last run {age_h:.0f} h ago")]
+        return [Finding("BACKUP_STALE", True, f"last success {age_h:.0f} h ago")]
     return [Finding("BACKUP_STALE", False)]
+
+
+def check_supervisor(status_text: str | None) -> list[Finding]:
+    """Programs Supervisor has given up on (FATAL) after the configured restart attempts. No
+    answer (not installed yet, or not running) is no finding: the heartbeat checks cover that."""
+    if not status_text:
+        return [Finding("SERVICE_FATAL", False)]
+    dead = [
+        ln.split()[0]
+        for ln in status_text.splitlines()
+        if len(ln.split()) > 1 and ln.split()[1] == "FATAL"
+    ]
+    if dead:
+        return [Finding("SERVICE_FATAL", True, ", ".join(dead))]
+    return [Finding("SERVICE_FATAL", False)]
+
+
+def supervisor_status(conf: Path, ctl: str) -> str | None:
+    import subprocess
+
+    if not conf.exists():
+        return None
+    try:
+        out = subprocess.run(
+            [ctl, "-c", str(conf), "status"], capture_output=True, text=True, timeout=10
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return out.stdout
 
 
 def check_disk(path: Path, cfg: Watchdog, usage=shutil.disk_usage) -> list[Finding]:

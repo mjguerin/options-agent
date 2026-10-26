@@ -59,12 +59,26 @@ class FeedHealth:
         if now - self.last_message_at > self.stale_after:
             self._open(max(self.last_message_at, regular_open), "stale")
 
-    def on_status(self, code: str, at: pd.Timestamp, halt_codes, resume_codes) -> None:
+    def on_status(
+        self,
+        code: str,
+        at: pd.Timestamp,
+        halt_codes,
+        resume_codes,
+        informational,
+        hold: pd.Timedelta,
+    ) -> None:
+        """A trading status from the feed, read through the configured mapping. An unlisted code
+        is not guessed at: entries are blocked for `hold`, and the slot is uncertain."""
         open_halt = bool(self.halts) and self.halts[-1][1] is None
-        if code in halt_codes and not open_halt:
-            self.halts.append([at, None, code])
-        elif code in resume_codes and open_halt:
-            self.halts[-1][1] = at
+        if code in halt_codes:
+            if not open_halt:
+                self.halts.append([at, None, code])
+        elif code in resume_codes:
+            if open_halt:
+                self.halts[-1][1] = at  # ends the trading-status halt only; data uncertainty stays
+        elif code not in informational:
+            self.unhealthy.append([at, at + hold, f"unknown_status:{code}"])
 
     def uncertain(self, a: pd.Timestamp, b: pd.Timestamp) -> bool:
         return _overlaps(self.unhealthy, a, b)

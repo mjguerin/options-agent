@@ -33,10 +33,23 @@ def config(tmp_path=None, **sections):
     return load_orders_config(p)
 
 
-def build(cfg=None):
+class Bid:
+    """A settable usable quote for repricing: (bid, ask), or (None, None) when there is none."""
+
+    def __init__(self, bid=1.80, ask=1.81):
+        self.bid, self.ask = bid, ask
+
+    def __call__(self, symbol, now):
+        return (self.bid, self.ask) if self.bid else (None, None)
+
+
+def build(cfg=None, quote=None):
     broker, store = FakeBroker(), IntentStore(memory_engine())
     sleeps = []
-    return broker, store, OrderManager("acct:vpc", broker, store, cfg or config(), sleeps.append)
+    m = OrderManager(
+        "acct:vpc", broker, store, cfg or config(), sleeps.append, quotes=quote or Bid()
+    )
+    return broker, store, m
 
 
 def enter(m, cand="c1", qty=13, bid=1.43, ask=1.44, now=T0):
@@ -106,7 +119,7 @@ def test_limit_price_comes_from_the_config(tmp_path):
     assert up.entry_price(1.43, 1.44) == pytest.approx(1.46)
     _, _, mid = build(config(tmp_path, entry={"price_basis": "mid"}))
     assert mid.entry_price(1.43, 1.44) == pytest.approx(1.44)  # 1.435 rounds up to the tick
-    assert m.exit_price(1.43, 1.44) == 1.43 and m.exit_price(None, None) == 0.01
+    assert m.exit_price(1.43, 1.44) == 1.43
 
 
 # ---- submission outcomes (OM-03, OM-04) ------------------------------------------------------
@@ -276,6 +289,72 @@ def test_unfilled_exits_step_down_then_fall_back_to_market():
         ("market", None),
     ]
     assert sells[-1].qty == 13
+
+
+def test_exit_replacements_start_from_a_fresh_bid_not_the_last_limit():
+    quote = Bid(1.80)
+    broker, store, m = build(quote=quote)
+    held(m, broker)
+    m.place_exit(at(60), "c1", "vpc", SYM, "TARGET", bid=1.80)
+    quote.bid = 1.70  # the market moved down while the order waited
+    m.poll(at(63))
+    sells = [r for r in broker.submits if r.side == "sell"]
+    assert [r.limit_price for r in sells] == [1.80, 1.69]  # 1.70 less one tick, not 1.80 less one
+
+
+def test_a_replacement_never_sells_more_than_is_still_held():
+    broker, store, m = build()
+    held(m, broker)
+    x = m.place_exit(at(60), "c1", "vpc", SYM, "TARGET", bid=1.80)
+    broker.fill(x.client_order_id, 8, 1.80)
+    # the account's own record shrinks (a fill we have not yet seen elsewhere): only 3 remain held
+    sold = store.get(x.client_order_id)
+    store.save(sold.with_(qty_filled=10))
+    m.poll(at(63))
+    sells = [r for r in broker.submits if r.side == "sell"]
+    assert [r.qty for r in sells] == [13, 3]
+
+
+def test_with_no_usable_bid_a_discretionary_exit_waits_and_never_invents_a_price():
+    quote = Bid(None)
+    broker, store, m = build(quote=quote)
+    held(m, broker)
+    assert m.place_exit(at(60), "c1", "vpc", SYM, "TARGET", bid=None) is None
+    assert [r for r in broker.submits if r.side == "sell"] == []
+    assert SYM in m.blind and m.blind[SYM]["reasons"] == ["TARGET"]
+    m.poll(at(65))
+    assert [r for r in broker.submits if r.side == "sell"] == []  # still no bid
+    quote.bid, quote.ask = 1.50, 1.52
+    m.poll(at(70))  # a usable bid arrives: the waiting exit goes out at it
+    (sell,) = [r for r in broker.submits if r.side == "sell"]
+    assert (sell.order_type, sell.limit_price) == ("limit", 1.50) and SYM not in m.blind
+
+
+def test_with_no_usable_bid_a_forced_exit_goes_to_the_market():
+    broker, store, m = build(quote=Bid(None))
+    held(m, broker)
+    m.place_exit(at(60), "c1", "vpc", SYM, "TARGET", bid=None)  # waits
+    x = m.place_exit(at(61), "c1", "vpc", SYM, "SESSION_CUTOFF", bid=None)  # forced: now
+    assert x.order_type == "market" and x.limit_price is None and SYM not in m.blind
+    assert set(x.reasons) == {"TARGET", "SESSION_CUTOFF"}
+
+
+def test_the_blind_exit_actions_are_config_values(tmp_path):
+    cfg = config(tmp_path, exit={"no_usable_bid_discretionary": "market"})
+    broker, store, m = build(cfg, Bid(None))
+    held(m, broker)
+    x = m.place_exit(at(60), "c1", "vpc", SYM, "TARGET", bid=None)
+    assert x.order_type == "market"
+
+
+def test_orders_of_unknown_fate_are_listed_so_nothing_is_resent_blindly():
+    broker, store, m = build()
+    broker.plan_submit = ["lost"]
+    broker.unreachable = True
+    i = enter(m)
+    assert i.status is Status.UNCERTAIN
+    assert m.unresolved(at(10), older_than_s=30) == []
+    assert [u.client_order_id for u in m.unresolved(at(40), older_than_s=30)] == [i.client_order_id]
 
 
 def test_a_partly_filled_exit_replaces_only_the_remainder():

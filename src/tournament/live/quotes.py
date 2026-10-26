@@ -26,6 +26,7 @@ from tournament.live.health import FeedHealth
 NO_QUOTE, FEED_DOWN = "NO_QUOTE", "FEED_DOWN"
 STALE_QUOTE, DELAYED_DELIVERY = "STALE_QUOTE", "DELAYED_DELIVERY"
 NO_BID, NO_ASK, CROSSED = "NO_BID", "NO_ASK", "CROSSED"
+CLOCK_SKEW = "CLOCK_SKEW"
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,13 @@ class QuoteView:
     age_s: float | None
 
 
+def usable_touch(view: QuoteView) -> tuple[float | None, float | None]:
+    """(bid, ask) of a quote that passed every gate, else (None, None)."""
+    if view.usable and view.quote is not None:
+        return view.quote.bid, view.quote.ask
+    return None, None
+
+
 def quote_from(msg: dict, received: pd.Timestamp) -> OptionQuote:
     return OptionQuote(
         msg["S"],
@@ -83,7 +91,10 @@ class QuoteBook:
     max_age: pd.Timedelta
     max_delivery_lag: pd.Timedelta
     lag_window: int
+    clock_tolerance: pd.Timedelta
+    history_size: int
     quotes: dict[str, OptionQuote] = field(default_factory=dict)
+    history: dict[str, deque] = field(default_factory=dict)
     counts: dict[str, int] = field(default_factory=lambda: {"quotes": 0, "out_of_order": 0})
     _lags: deque = field(init=False)
 
@@ -93,6 +104,7 @@ class QuoteBook:
     def on_quote(self, q: OptionQuote) -> None:
         self.counts["quotes"] += 1
         self._lags.append(q.delivery_lag_s)
+        self.history.setdefault(q.symbol, deque(maxlen=self.history_size)).append(q)
         old = self.quotes.get(q.symbol)
         if old is not None and q.ts < old.ts:
             self.counts["out_of_order"] += 1  # a late older quote never replaces a newer one
@@ -106,8 +118,23 @@ class QuoteBook:
         a = np.array(self._lags)
         return {"p50": float(np.percentile(a, 50)), "p99": float(np.percentile(a, 99))}
 
+    def asof(self, symbol: str, t: pd.Timestamp) -> OptionQuote | None:
+        """The latest quote we had received by time `t`: never one that arrived later."""
+        for q in reversed(self.history.get(symbol, ())):
+            if q.received <= t:
+                return q
+        return None
+
+    def view_at(self, symbol: str, t: pd.Timestamp) -> QuoteView:
+        """The quote gates as they stood at time `t`, from the quote we held then."""
+        return self._judge(symbol, self.asof(symbol, t), t, True)
+
     def view(self, symbol: str, now: pd.Timestamp, feed_ok: bool = True) -> QuoteView:
-        q = self.quotes.get(symbol)
+        return self._judge(symbol, self.quotes.get(symbol), now, feed_ok)
+
+    def _judge(
+        self, symbol: str, q: OptionQuote | None, now: pd.Timestamp, feed_ok: bool
+    ) -> QuoteView:
         if q is None:
             return QuoteView(symbol, None, False, (NO_QUOTE,), None)
         age = (now - q.ts).total_seconds()
@@ -118,6 +145,8 @@ class QuoteBook:
             reasons.append(STALE_QUOTE)
         if q.delivery_lag_s > self.max_delivery_lag.total_seconds():
             reasons.append(DELAYED_DELIVERY)
+        if q.delivery_lag_s < -self.clock_tolerance.total_seconds():
+            reasons.append(CLOCK_SKEW)  # stamped in the future: the clocks disagree
         if q.bid <= 0:
             reasons.append(NO_BID)
         if q.ask <= 0:
@@ -138,8 +167,10 @@ class OptionFeed:
         max_delivery_lag: pd.Timedelta,
         silent_after: pd.Timedelta,
         lag_window: int,
+        clock_tolerance: pd.Timedelta,
+        history_size: int,
     ) -> None:
-        self.book = QuoteBook(max_age, max_delivery_lag, lag_window)
+        self.book = QuoteBook(max_age, max_delivery_lag, lag_window, clock_tolerance, history_size)
         self.health = FeedHealth(silent_after)
         self.snapshots: list[dict] = []
         self._dirty: set[str] = set()
@@ -199,3 +230,9 @@ class OptionFeed:
 
     def view(self, symbol: str, now: pd.Timestamp) -> QuoteView:
         return self.book.view(symbol, now, self.entries_allowed(now))
+
+    def asof(self, symbol: str, t: pd.Timestamp) -> OptionQuote | None:
+        return self.book.asof(symbol, t)
+
+    def usable_at(self, symbol: str, t: pd.Timestamp) -> QuoteView:
+        return self.book.view_at(symbol, t)

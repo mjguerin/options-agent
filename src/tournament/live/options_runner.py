@@ -29,6 +29,7 @@ class OptionsCollector:
         self, cfg: dict, stream_cfg: dict, creds, day, mode: str, spot: float, history
     ) -> None:
         self.cfg, self.day, self.mode = cfg, day, mode
+        self.held_symbols = lambda: ()  # replaced once the accounts exist
         self.error: str | None = None
         d = day.session_date
         self.expirations = {d + timedelta(days=n) for n in cfg["watch_expiry_days"]}
@@ -44,6 +45,8 @@ class OptionsCollector:
             pd.Timedelta(seconds=cfg["quote_max_delivery_lag_s"]),
             pd.Timedelta(seconds=cfg["feed_silent_after_s"]),
             cfg["quote_lag_window"],
+            pd.Timedelta(seconds=cfg["quote_clock_tolerance_s"]),
+            cfg["quote_history_per_symbol"],
         )
         self.open_ts = pd.Timestamp(day.open_utc)
         self.stream = AlpacaOptionStream(
@@ -64,8 +67,10 @@ class OptionsCollector:
         self.refresh(spot)
 
     def refresh(self, spot: float) -> None:
+        # held positions and working orders come first and are never cut, wherever spot is
         plan = self.manager.plan(
-            watch=self.universe.window(spot, self.expirations, self.cfg["watch_strikes_each_side"])
+            held=self.held_symbols(),
+            watch=self.universe.window(spot, self.expirations, self.cfg["watch_strikes_each_side"]),
         )
         self.stream.set_symbols(plan.symbols)
 

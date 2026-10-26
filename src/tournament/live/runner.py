@@ -29,8 +29,9 @@ from tournament.features.pipeline import calendar_days, carry_context
 from tournament.live.controls import ControlPlane
 from tournament.live.engine import ShadowEngine
 from tournament.live.options_runner import OptionsCollector
+from tournament.live.recovery import mark_outage_from, previous_runs, replay_journals
 from tournament.live.session import LiveSession
-from tournament.live.shadow_accounts import ShadowAccounts, shadow_db_path
+from tournament.live.shadow_accounts import ShadowAccounts, has_exposure, shadow_db_path
 from tournament.live.stream import AlpacaStockStream
 from tournament.marketdata.calendar import SessionDay
 from tournament.marketdata.eligibility import EligibilityConfig, Usage
@@ -81,7 +82,7 @@ def all_workers() -> list:
 
 
 def make_engine(
-    session: LiveSession, store: HistoryStore | None, day: SessionDay
+    session: LiveSession, store: HistoryStore | None, day: SessionDay, run_id: str
 ) -> ShadowEngine | None:
     """The shadow engine needs the context of the previous session: the store must hold every
     session before today. Otherwise the feed is recorded without decisions (and says why)."""
@@ -93,7 +94,8 @@ def make_engine(
                     day.session_date)  # fmt: skip
         return None
     prior, baseline = carry_context(store, Usage.LIVE, day.session_date)
-    return ShadowEngine(session, all_workers(), prior, baseline, usage=Usage.LIVE)
+    # one run identity for the whole session day, so a restart recreates the same candidate IDs
+    return ShadowEngine(session, all_workers(), prior, baseline, usage=Usage.LIVE, run_id=run_id)
 
 
 def latest_spy_price(creds, feed: str, symbol: str) -> float:
@@ -116,6 +118,7 @@ def run_session(
     store: HistoryStore | None = None,
     options: bool = True,
     manifest=None,
+    fresh: bool = False,
 ) -> LiveSession:
     key_id, secret = creds.key_id, creds.secret_key
     fc = load_feed_config()
@@ -123,7 +126,14 @@ def run_session(
     test = mode == "test"
     underlying = app_config().underlying
     symbol = fc["test_symbol"] if test else underlying
-    out = unique_run_dir(out_root / day.session_date.isoformat(), mode)
+    day_dir = out_root / day.session_date.isoformat()
+    # earlier starts of this same session day (a crash or a restart), unless this run is a
+    # deliberate fresh simulation under its own identity
+    earlier = [] if fresh else previous_runs(day_dir, mode)
+    out = unique_run_dir(day_dir, mode)
+    run_id = f"live-{day.session_date}-{mode}" + (
+        f"-fresh-{datetime.now():%H%M%S}" if fresh else ""
+    )
     session = LiveSession(
         day,
         EligibilityConfig(),
@@ -133,6 +143,8 @@ def run_session(
         stale_after=timedelta(seconds=fc["test_stale_after_s" if test else "stale_after_s"]),
         halt_codes=frozenset(fc["halt_status_codes"]),
         resume_codes=frozenset(fc["resume_status_codes"]),
+        informational_codes=frozenset(fc["informational_status_codes"]),
+        unknown_status_hold=timedelta(seconds=fc["unknown_status_hold_s"]),
         on_bar=lambda r: log.info(
             "slot %s %s close=%s trades=%s",
             r["slot"],
@@ -145,6 +157,7 @@ def run_session(
     if mode == "shadow" and fc["alerts"]["enabled"]:
         acfg = load_alerts_config()
         incidents = Incidents.from_config(acfg)
+    manage_only = False
     preflight_report = None
     if manifest is not None:
         from tournament.accounts.manifest import preflight
@@ -159,12 +172,29 @@ def run_session(
         for c in result.failures:
             log.warning("preflight %s: %s %s", "FAIL" if c.blocking else "warn", c.name, c.detail)
         if not result.passed:
+            now = pd.Timestamp.now(tz="UTC")
+            names = ", ".join(c.name for c in result.failures if c.blocking)
             if incidents is not None:
-                now = pd.Timestamp.now(tz="UTC")
-                names = ", ".join(c.name for c in result.failures if c.blocking)
                 incidents.open(now, "PREFLIGHT_FAILED", names)
-            raise PreflightFailed(preflight_report)
-    engine = make_engine(session, store, day) if mode == "shadow" else None
+            # a failed preflight blocks new entries; it never abandons positions already held
+            if not has_exposure(shadow_db_path(day_dir, fresh)):
+                raise PreflightFailed(preflight_report)
+            manage_only = True
+            log.error("preflight failed but exposure exists: managing it, no new entries")
+    engine = make_engine(session, store, day, run_id) if mode == "shadow" else None
+    recovered = None
+    if earlier:
+        # rebuild the strategy side from the journals: bars, features, worker state, reference
+        # positions. No accounts are attached yet, so nothing is ordered during the replay.
+        try:
+            recovered = replay_journals(session, earlier)
+            mark_outage_from(session, recovered["last_at"])
+            log.info(
+                "recovered %s frames from %d earlier start(s)", recovered["frames"], len(earlier)
+            )
+        except Exception as exc:  # noqa: BLE001 - say so; accounts below halt rather than guess
+            log.exception("journal replay failed: %s", exc)
+            recovered = {"error": f"{type(exc).__name__}: {exc}"}
     collector = None
     if mode == "shadow" and options:
         from tournament.adapters.alpaca_history import AlpacaHistory
@@ -192,9 +222,20 @@ def run_session(
                 [w.strategy_id for w in engine.harness.workers],
                 sa["starting_balance_usd"],
                 sess["cutoff_min_before_close"],
-                shadow_db_path(out),
+                shadow_db_path(day_dir, fresh),
                 sa["tick_every_s"],
+                sa["reconcile_every_s"],
             )
+            now0 = pd.Timestamp.now(tz="UTC")
+            if recovered is not None and "error" in recovered:
+                for rt in accounts.router.runtimes.values():
+                    rt.operator_halt = "RECOVERY_FAILED"  # strategy state is unknown: no entries
+                accounts.errors.append(f"journal replay: {recovered['error']}")
+            accounts.recover(now0, engine.harness.closed_references())
+            if manage_only:
+                for rt in accounts.router.runtimes.values():
+                    rt.operator_halt = "PREFLIGHT_FAILED"
+            collector.held_symbols = accounts.held_symbols
             accounts.attach(engine.harness)
         except Exception as exc:  # noqa: BLE001 - recording must go on without the accounts
             log.exception("shadow accounts not started: %s", exc)
@@ -254,13 +295,29 @@ def run_session(
             collector.on_bar(row)
 
         session.on_bar = on_bar
+    # through the close, then long enough to settle orders and reconcile (BRD 10.6)
     until = (
-        pd.Timestamp(day.close_utc) + session.delay + pd.Timedelta(seconds=fc["shutdown_grace_s"])
+        pd.Timestamp(day.close_utc)
+        + session.delay
+        + pd.Timedelta(seconds=fc["shutdown_grace_s"] + app_config().engine.post_close_s)
     )
     with (out / "stream.jsonl").open("a") as journal:
 
         def record(msgs: list[dict], received: pd.Timestamp) -> None:
             journal.write(json.dumps({"r": received.isoformat(), "m": msgs}) + "\n")
+            journal.flush()  # a crash loses nothing the process has already seen
+
+        def event(kind: str, at: pd.Timestamp) -> None:
+            journal.write(json.dumps({"r": at.isoformat(), "event": kind}) + "\n")
+            journal.flush()
+
+        def on_connected(at: pd.Timestamp) -> None:
+            event("connected", at)
+            session.on_connected(at)
+
+        def on_disconnected(at: pd.Timestamp) -> None:
+            event("disconnected", at)
+            session.on_disconnected(at)
 
         stream = AlpacaStockStream(
             "test" if test else "sip",
@@ -269,8 +326,8 @@ def run_session(
             [symbol],
             mode=mode,
             on_messages=session.on_messages,
-            on_connected=session.on_connected,
-            on_disconnected=session.on_disconnected,
+            on_connected=on_connected,
+            on_disconnected=on_disconnected,
             on_tick=on_tick,
             on_frame=record,
             tick_s=fc["tick_s"],
@@ -289,9 +346,32 @@ def run_session(
             asyncio.run(main())
         finally:
             # a crash or a stop signal still leaves the bars, summary and records written so far
-            session.tick(min(until, pd.Timestamp.now(tz="UTC")))
+            now_end = pd.Timestamp.now(tz="UTC")
+            session.tick(min(until, now_end))
+            reconciliation = None
+            if accounts is not None and now_end >= pd.Timestamp(day.close_utc):
+                reconciliation = accounts.post_close(now_end)
+                if incidents is not None:
+                    for binding, r in reconciliation.items():
+                        bad = (
+                            r.get("error")
+                            or r.get("position_mismatches")
+                            or r.get("unresolved_orders")
+                        )
+                        if bad:
+                            incidents.open(
+                                now_end, "RECONCILIATION_FAILED", str(bad)[:200], binding
+                            )
             write_outputs(
-                session, out, mode, stream.connects, engine, collector, accounts, preflight_report
+                session,
+                out,
+                mode,
+                stream.connects,
+                engine,
+                collector,
+                accounts,
+                preflight_report,
+                {"recovered": recovered, "reconciliation": reconciliation, "fresh": fresh},
             )
             if monitor is not None:
                 monitor.tick(pd.Timestamp.now(tz="UTC"))
@@ -308,6 +388,7 @@ def write_outputs(
     collector: OptionsCollector | None = None,
     accounts: ShadowAccounts | None = None,
     preflight_report: dict | None = None,
+    lifecycle: dict | None = None,
 ) -> None:
     bars = pd.DataFrame(session.bars)
     if not bars.empty:
@@ -356,6 +437,8 @@ def write_outputs(
         summary["accounts"] = accounts.summary()
     if preflight_report is not None:
         summary["preflight"] = preflight_report
+    if lifecycle is not None:
+        summary["lifecycle"] = lifecycle
     (out / "summary.json").write_text(json.dumps(summary, indent=1, default=str))
 
 

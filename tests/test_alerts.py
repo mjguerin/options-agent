@@ -76,7 +76,7 @@ def test_every_message_is_data_in_the_config(tmp_path):
     with pytest.raises(AlertsConfigError):
         load_alerts_config(p)
     with pytest.raises(AlertsConfigError):
-        edited(tmp_path, delivery={"max_per_minute": 0})
+        edited(tmp_path, delivery={"max_per_minute": {"info": 0, "warning": 1, "critical": 1}})
 
 
 # ---- the incident lifecycle (10.5) ----
@@ -119,6 +119,18 @@ def test_a_critical_incident_that_stays_open_is_repeated():
 # ---- delivery ----
 
 
+def test_each_severity_has_its_own_allowance(tmp_path):
+    limits = {"info": 1, "warning": 1, "critical": 5}
+    store, sender, bot = build(edited(tmp_path, delivery={"max_per_minute": limits}))
+    for i in range(4):
+        store.notify(at(0), "SESSION_SUMMARY", f"quiet {i}")  # info
+    for i in range(3):
+        store.open(at(0), "ENGINE_ERROR", "engine", f"boom {i}", key=f"E{i}")  # critical
+    bot.step(at(1))
+    assert sum("Decision engine stopped" in t for t in sender.sent) == 3  # not held back by info
+    assert sum(t.startswith("quiet") for t in sender.sent) == 1
+
+
 def test_the_most_severe_alert_goes_first():
     store, sender, bot = build()
     store.notify(at(0), "SESSION_SUMMARY", "all quiet")
@@ -141,7 +153,8 @@ def test_a_failed_send_backs_off_and_retries_without_losing_the_alert():
 
 
 def test_the_rate_limit_holds_the_rest_for_the_next_minute(tmp_path):
-    store, sender, bot = build(edited(tmp_path, delivery={"max_per_minute": 3}))
+    limits = {"info": 3, "warning": 3, "critical": 3}
+    store, sender, bot = build(edited(tmp_path, delivery={"max_per_minute": limits}))
     for i in range(5):
         store.open(at(0), "ACCOUNT_ERROR", "engine", f"e{i}", account=f"a{i}")
     bot.step(at(1))
@@ -255,13 +268,28 @@ def test_the_nightly_job_must_report_and_report_clean(tmp_path):
     assert not check_nightly(d, tmp_path)[0].active
 
 
-def test_backup_disk_and_database_checks(tmp_path):
+def test_backup_must_have_succeeded_not_merely_run(tmp_path):
     log = tmp_path / "backup.log"
     assert check_backup(T0, log, WD)[0].active  # never ran
-    log.write_text("ok")
-    now = pd.Timestamp.now(tz="UTC")
-    assert not check_backup(now, log, WD)[0].active
-    assert check_backup(now + pd.Timedelta(hours=WD.backup_max_age_h + 1), log, WD)[0].active
+    log.write_text("pg_dump: error: connection refused\n")  # a failed run touched the file
+    assert "no successful backup" in check_backup(T0, log, WD)[0].detail
+    log.write_text("2026-10-26T20:00:01Z backup: ok 14M\n")
+    when = pd.Timestamp("2026-10-26T20:00:01Z")
+    assert not check_backup(when + pd.Timedelta(hours=2), log, WD)[0].active
+    assert check_backup(when + pd.Timedelta(hours=WD.backup_max_age_h + 1), log, WD)[0].active
+
+
+def test_supervisor_programs_it_gave_up_on_are_reported():
+    from tournament.alerts.watchdog import check_supervisor
+
+    ok = "alerts RUNNING pid 1\napi RUNNING pid 2\nengine EXITED Oct 26 04:00\n"
+    assert not check_supervisor(ok)[0].active and not check_supervisor(None)[0].active
+    bad = ok + "dashboard FATAL Exited too quickly\n"
+    f = check_supervisor(bad)[0]
+    assert f.active and f.detail == "dashboard"
+
+
+def test_disk_and_database_checks(tmp_path):
     low = lambda p: SimpleNamespace(free=5e9)  # noqa: E731
     ok = lambda p: SimpleNamespace(free=500e9)  # noqa: E731
     assert check_disk(tmp_path, WD, low)[0].active and not check_disk(tmp_path, WD, ok)[0].active
@@ -362,7 +390,12 @@ def test_accounts_report_limit_halts_blocks_errors_and_residual_exposure(tmp_pat
             guard=SimpleNamespace(update=lambda *a: SimpleNamespace(loss=510.0)),
             realized_pnl=lambda: -100.0,
             risk=SimpleNamespace(daily_loss=SimpleNamespace(limit_usd=500)),
-            orders=SimpleNamespace(entries_blocked=blocked),
+            orders=SimpleNamespace(
+                entries_blocked=blocked,
+                blind={},
+                unresolved=lambda *a: [],
+                cfg=SimpleNamespace(exit=SimpleNamespace(blind_alert_after_s=15)),
+            ),
             store=SimpleNamespace(filled_by_symbol=lambda b: held or {}),
         )
 

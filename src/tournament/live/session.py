@@ -41,12 +41,16 @@ class LiveSession:
         stale_after: timedelta,
         halt_codes: frozenset[str],
         resume_codes: frozenset[str],
+        informational_codes: frozenset[str],
+        unknown_status_hold: timedelta,
         on_bar: Callable[[dict], None] | None = None,
     ) -> None:
         symbol = symbol or app_config().underlying
         self.day, self.cfg, self.symbol, self.usage = day, cfg, symbol, usage
         self.delay = pd.Timedelta(finalize_delay)
         self.halt_codes, self.resume_codes = halt_codes, resume_codes
+        self.informational_codes = informational_codes
+        self.unknown_status_hold = pd.Timedelta(unknown_status_hold)
         # rules_symbol: whose listing market the SIP state uses (the test stream's synthetic
         # symbol borrows SPY's)
         self.rules_symbol = rules_symbol or symbol
@@ -93,7 +97,14 @@ class LiveSession:
                 self.builder.correct(cancel_from(msg))
             elif kind == "s":
                 st = status_from(msg)
-                self.health.on_status(st.code, st.ts, self.halt_codes, self.resume_codes)
+                self.health.on_status(
+                    st.code,
+                    st.ts,
+                    self.halt_codes,
+                    self.resume_codes,
+                    self.informational_codes,
+                    self.unknown_status_hold,
+                )
 
     def tick(self, now: pd.Timestamp) -> None:
         self.health.check_stale(now, pd.Timestamp(self.day.open_utc))

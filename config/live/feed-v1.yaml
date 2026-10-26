@@ -5,6 +5,8 @@ version: feed-v1-draft
 test_symbol: FAKEPACA        # Alpaca's synthetic symbol on the test feed
 halt_status_codes: [H, P]    # D-49: trading status codes that open a halt (H halt, P LULD pause)
 resume_status_codes: [T]    # D-49: the code that ends it (trading resumption)
+informational_status_codes: [Q]  # D-49: known, neither opens nor ends a halt (quotation resumption)
+unknown_status_hold_s: 60   # D-49: a status code not listed marks this long uncertain (fails closed)
 stale_after_s: 5            # D-48: no message for this long while connected = feed uncertain
 test_stale_after_s: 15      # the test stream sends one trade every 5 s
 tick_s: 0.25                # how often due slots and staleness are checked without input
@@ -25,6 +27,7 @@ shadow_accounts:                    # modeled paper accounts in shadow mode (ord
   enabled: true
   starting_balance_usd: 10000       # equal for every strategy (FR-06, FR-13)
   tick_every_s: 1.0                 # how often the position loop runs
+  reconcile_every_s: 300            # compare our books with the broker's this often (OM-05)
 
 # Option quotes (OPRA). D-52 to D-54, DRAFT.
 options:
@@ -37,3 +40,5 @@ options:
   watch_expiry_days: [0]
   contract_fetch_range_pct: 0.10  # contracts within this fraction of spot are loaded
   quote_lag_window: 5000     # recent quotes kept for the delivery-lag percentiles
+  quote_clock_tolerance_s: 0.25  # a quote stamped this far in the future means the clocks disagree
+  quote_history_per_symbol: 600  # recent quotes kept per contract, for the modeled fills' as-of lookups

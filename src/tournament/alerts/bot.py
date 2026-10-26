@@ -68,11 +68,12 @@ class AlertBot:
     # ---- delivery -----------------------------------------------------------------------
     def _deliver(self, now: pd.Timestamp) -> None:
         d = self.cfg.delivery
-        room = d.max_per_minute - self.store.sent_since(now - pd.Timedelta(seconds=60))
-        if room <= 0:
-            return
+        # each severity has its own allowance, so a burst of routine messages can't hold back a
+        # critical one (and a critical storm can't be throttled by a quiet info limit)
+        since = now - pd.Timedelta(seconds=60)
+        rooms = {s: lim - self.store.sent_since(since, s) for s, lim in d.max_per_minute.items()}
         expired = 0
-        for o in self.store.due(now, room + 50):
+        for o in self.store.due(now, sum(d.max_per_minute.values()) + 50):
             if (now - o.created_at).total_seconds() > d.expire_after_s:
                 self.store.drop(o.id, "EXPIRED")
                 expired += 1
@@ -81,13 +82,13 @@ class AlertBot:
                 self.store.drop(o.id, "BELOW_MIN_SEVERITY")
                 self.stats["dropped"] += 1
                 continue
-            if room <= 0:
-                break
+            if rooms[o.severity] <= 0:
+                continue  # held until the next minute; other severities still go
             res = self.sender.send(o.text)
             if res.ok:
                 self.store.mark_sent(now, o.id)
                 self.stats["sent"] += 1
-                room -= 1
+                rooms[o.severity] -= 1
             else:
                 backoff = d.retry_backoff_s[min(o.attempts, len(d.retry_backoff_s) - 1)]
                 wait = max(backoff, res.retry_after_s or 0)

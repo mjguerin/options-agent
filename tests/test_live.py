@@ -48,6 +48,8 @@ def session(connect=PRE, stale=timedelta(hours=1)):
         finalize_delay=timedelta(seconds=2),
         halt_codes=frozenset({"H", "P"}),
         resume_codes=frozenset({"T"}),
+        informational_codes=frozenset({"Q"}),
+        unknown_status_hold=timedelta(seconds=60),
         stale_after=stale,
     )
     s.on_connected(connect)

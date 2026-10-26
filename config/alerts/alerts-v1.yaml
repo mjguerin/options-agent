@@ -12,7 +12,7 @@ telegram:
 
 delivery:
   poll_s: 5                          # how often the bot looks for unsent alerts
-  max_per_minute: 20                 # more than this are held for the next minute
+  max_per_minute: {info: 6, warning: 12, critical: 30}  # per severity; more are held a minute
   retry_backoff_s: [5, 15, 60, 300]  # waits after a failed send; the last one repeats
   expire_after_s: 3600               # an alert still unsent after this is dropped, with a note
   min_severity: info                 # info | warning | critical: nothing below is sent
@@ -22,6 +22,7 @@ delivery:
 monitor:                             # the engine-side checks, run once a second
   feed_down_grace_s: 10              # a feed must stay down this long before it is an incident
   flat_deadline_min_before_close: 5  # anything still held after close - 5 min is an incident (SD-10)
+  order_unresolved_after_s: 30       # an order of unknown state this long is an incident
 
 heartbeat:
   file: data/run/engine.heartbeat.json
@@ -34,6 +35,8 @@ watchdog:                            # checks the bot runs itself, on the host
   nightly_deadline_after_s: 10800    # the nightly job must have reported within 3 h of its start
   backup_log: ~/Library/Logs/options-tournament/backup.log
   backup_max_age_h: 26
+  supervisor_conf: data/run/supervisord.conf
+  supervisorctl: /opt/homebrew/bin/supervisorctl
   min_free_disk_gb: 20
   disk_path: data
 
@@ -103,6 +106,22 @@ kinds:
     severity: critical
     open: "Database unreachable: {detail}."
     resolved: "Database reachable."
+  SERVICE_FATAL:
+    severity: critical
+    open: "Supervisor gave up restarting: {detail}."
+    resolved: "Supervised programs are running."
+  RECONCILIATION_FAILED:
+    severity: critical
+    open: "{account} did not reconcile after the close: {detail}"
+    resolved: "{account} reconciled."
+  EXIT_BLIND:
+    severity: critical
+    open: "{account} cannot exit {detail}: no usable bid. Forced exits go to market; others wait."
+    resolved: "{account} exit is placed or the position is closed."
+  ORDER_UNRESOLVED:
+    severity: critical
+    open: "{account} has orders of unknown state ({detail}). Nothing is resent until they are settled."
+    resolved: "{account} orders are settled."
   SESSION_SUMMARY:
     severity: info
     open: "{detail}"

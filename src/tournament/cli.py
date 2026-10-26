@@ -279,6 +279,44 @@ def _alerts_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _breakglass(args: argparse.Namespace) -> int:
+    """The way to flatten that does not depend on the API, the dashboard or a token (BRD 14).
+    Whoever can run it on the mini already holds the keys: the operating system is the
+    authentication. It queues the same command the engine already applies, and audits it."""
+    from datetime import datetime
+
+    from tournament.api.config import load_api_config
+    from tournament.api.store import ControlStore
+    from tournament.orders.store import default_engine
+
+    command = "EMERGENCY" if args.what == "emergency" else "FLATTEN_ACCOUNT"
+    scope = "global" if args.what == "emergency" else "account"
+    account = None if args.what == "emergency" else args.account
+    if scope == "account" and not account:
+        print("flatten needs --account", file=sys.stderr)
+        return 2
+    target = account or "ALL ACCOUNTS"
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("not a terminal: pass --yes to confirm", file=sys.stderr)
+            return 2
+        typed = input(f"This will {command} on {target}. Type {command} to confirm: ")
+        if typed.strip() != command:
+            print("not confirmed")
+            return 1
+    store = ControlStore(default_engine())
+    now = pd.Timestamp(datetime.now().astimezone()).tz_convert("UTC")
+    cid = store.enqueue(
+        now, load_api_config().commands.ttl_s, "operator-cli", command, scope, account, None, None
+    )
+    store.audit(
+        now, "operator-cli", "ACCEPTED", "break-glass from the local shell", "local shell",
+        command, scope, account, cid,
+    )  # fmt: skip
+    print(f"queued {command} for {target} as {cid}; the engine applies it within a few seconds")
+    return 0
+
+
 def _api_run(args: argparse.Namespace) -> int:
     import logging
 
@@ -406,6 +444,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="don't collect OPRA option quotes",
     )
     run.set_defaults(func=_feed_run)
+
+    bg = sub.add_parser(
+        "breakglass", help="flatten from the local shell, independent of the API and dashboard"
+    )
+    bg.add_argument("what", choices=["emergency", "flatten"])
+    bg.add_argument("--account", help="the account to flatten, for `flatten`")
+    bg.add_argument("--yes", action="store_true", help="skip the typed confirmation")
+    bg.set_defaults(func=_breakglass)
 
     dash = sub.add_parser("dashboard", help="the dashboard (loopback only)")
     dash_sub = dash.add_subparsers(dest="dashboard_command", required=True)

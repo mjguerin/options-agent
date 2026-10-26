@@ -42,6 +42,27 @@ class DailyLossGuard:
     def reset_session(self) -> None:
         self.breached_at: pd.Timestamp | None = None
 
+    def risk_view(self, realized_pnl: float, positions: list[OpenPosition]) -> dict:
+        """Three numbers kept apart, none of which touches the accounting: realized profit and
+        loss; the estimate with open positions at their latest usable bid, leaving unmarked ones
+        out; and the conservative risk figure that values an unmarked position at zero (the
+        premium counted as lost). The last is what the daily limit reads."""
+        estimated_open, risk_open, unmarked = 0.0, 0.0, 0
+        for p in positions:
+            if p.bid is None:
+                unmarked += 1
+                risk_open -= p.entry_price * p.quantity * self.multiplier  # zero liquidation value
+            else:
+                v = (p.bid - p.entry_price) * p.quantity * self.multiplier
+                estimated_open += v
+                risk_open += v
+        return {
+            "realized_usd": realized_pnl,
+            "estimated_usd": realized_pnl + estimated_open,
+            "risk_usd": realized_pnl + risk_open,
+            "unmarked_positions": unmarked,
+        }
+
     def update(
         self, now: pd.Timestamp, realized_pnl: float, positions: list[OpenPosition]
     ) -> LossStatus:

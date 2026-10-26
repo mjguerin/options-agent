@@ -85,10 +85,16 @@ class AlpacaOptionStream(MarketDataStream):
 
     async def sync(self, ws) -> None:
         add, drop = self.desired - self._sent, self._sent - self.desired
+        # subscribe before unsubscribing where the limit allows, so a contract that stays needed
+        # (a held position's, a working order's) never has a moment without quotes
+        subscribe_first = len(self._sent | add) <= self.max_symbols
+        if add and subscribe_first:
+            await ws.send(self.encode({"action": "subscribe", "quotes": sorted(add)}))
+            self._sent |= add
         if drop:
             await ws.send(self.encode({"action": "unsubscribe", "quotes": sorted(drop)}))
             self._sent -= drop
-        if add:
+        if add and not subscribe_first:
             await ws.send(self.encode({"action": "subscribe", "quotes": sorted(add)}))
             self._sent |= add
 

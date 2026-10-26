@@ -27,6 +27,7 @@ class SizeResult:
     premium_at_risk: float
     planned_stop_risk: float
     capped_by: str | None  # "cash" or "ask_size" when the budget allowed more
+    requested_quantity: int  # what the budget alone allowed, before cash and quoted size
 
     @property
     def sized(self) -> bool:
@@ -44,6 +45,7 @@ def size_order(
     budget = Decimal(str(s.premium_budget_pct)) * Decimal(str(basis_equity))
     cost = Decimal(str(ask)) * s.contract_multiplier
     capped = None
+    requested = 0
 
     def result(q: int, reasons: tuple[str, ...]) -> SizeResult:
         risk = float(cost * q)
@@ -55,11 +57,13 @@ def size_order(
             risk,
             risk * cfg.premium_stop.loss_pct,
             capped,
+            requested,
         )
 
     if cost <= 0 or cost > budget:
         return result(0, (PREMIUM_EXCEEDS_BUDGET,))
     qty = int((budget / cost).to_integral_value(rounding=ROUND_FLOOR))
+    requested = qty
     by_cash = int((Decimal(str(available_cash)) / cost).to_integral_value(rounding=ROUND_FLOOR))
     if by_cash < qty:
         qty, capped = by_cash, "cash"

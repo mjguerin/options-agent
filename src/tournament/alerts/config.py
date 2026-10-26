@@ -33,17 +33,26 @@ class Telegram(_S):
 
 class Delivery(_S):
     poll_s: float = Field(gt=0)
-    max_per_minute: int = Field(ge=1)
+    max_per_minute: dict[str, int]
     retry_backoff_s: list[float] = Field(min_length=1)
     expire_after_s: float = Field(gt=0)
     min_severity: Severity
     repeat_open_critical_s: float = Field(gt=0)
     session_summary: bool
 
+    @model_validator(mode="after")
+    def _every_severity(self):
+        if set(self.max_per_minute) != set(RANK) or min(self.max_per_minute.values()) < 1:
+            raise ValueError(
+                f"max_per_minute needs a limit of at least 1 for each of {sorted(RANK)}"
+            )
+        return self
+
 
 class Monitor(_S):
     feed_down_grace_s: float = Field(ge=0)
     flat_deadline_min_before_close: float = Field(ge=0)
+    order_unresolved_after_s: float = Field(gt=0)
 
 
 class Heartbeat(_S):
@@ -57,6 +66,8 @@ class Watchdog(_S):
     engine_grace_after_start_s: float = Field(ge=0)
     nightly_deadline_after_s: float = Field(gt=0)
     backup_log: str
+    supervisor_conf: str
+    supervisorctl: str
     backup_max_age_h: float = Field(gt=0)
     min_free_disk_gb: float = Field(ge=0)
     disk_path: str

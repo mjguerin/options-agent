@@ -222,13 +222,12 @@ class AlertStore:
         with self.engine.begin() as c:
             c.execute(update(alert_outbox).where(alert_outbox.c.id == oid).values(dropped=reason))
 
-    def sent_since(self, since: pd.Timestamp) -> int:
+    def sent_since(self, since: pd.Timestamp, severity: str | None = None) -> int:
+        q = select(alert_outbox.c.id).where(alert_outbox.c.sent_at >= since.to_pydatetime())
+        if severity is not None:
+            q = q.where(alert_outbox.c.severity == severity)
         with self.engine.connect() as c:
-            return len(
-                c.execute(
-                    select(alert_outbox.c.id).where(alert_outbox.c.sent_at >= since.to_pydatetime())
-                ).all()
-            )
+            return len(c.execute(q).all())
 
     def open_incidents(self) -> list[Incident]:
         with self.engine.connect() as c:

@@ -108,7 +108,14 @@ def chain():
 
 
 def feed(bid=1.43, ask=1.44, bid_size=20, ask_size=30, now=T0):
-    f = OptionFeed(pd.Timedelta(seconds=5), pd.Timedelta(seconds=2), pd.Timedelta(seconds=10), 5000)
+    f = OptionFeed(
+        pd.Timedelta(seconds=5),
+        pd.Timedelta(seconds=2),
+        pd.Timedelta(seconds=10),
+        5000,
+        pd.Timedelta(seconds=0.25),
+        600,
+    )
     f.on_connected(now - pd.Timedelta(minutes=5))
 
     def put(symbol):

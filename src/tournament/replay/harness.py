@@ -195,6 +195,10 @@ class ReplayRun:
             self._session(out)
         return self._result()
 
+    def closed_references(self) -> list[tuple[str, str, str]]:
+        """(strategy, candidate, reason) of every reference position closed so far."""
+        return [(r["strategy_id"], r["candidate_id"], r["exit_primary_reason"]) for r in self._ref]
+
     def latest_evaluations(self) -> dict[str, dict]:
         """The most recent evaluation record of each worker (for the live dashboard)."""
         out: dict[str, dict] = {}

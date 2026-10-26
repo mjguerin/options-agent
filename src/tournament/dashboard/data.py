@@ -99,6 +99,8 @@ def accounts_table(state: dict | None) -> pd.DataFrame:
                 "exposure $": a.get("exposure_usd", 0.0),
                 "realized $": a.get("realized_pnl_usd", 0.0),
                 "unrealized $": round(unreal, 2),
+                "risk $": (a.get("pnl_view") or {}).get("risk_usd"),
+                "unmarked": (a.get("pnl_view") or {}).get("unmarked_positions", 0),
                 "pending orders": a.get("pending_orders", 0),
                 "decisions": a.get("decisions", 0),
             }

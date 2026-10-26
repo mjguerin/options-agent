@@ -55,6 +55,7 @@ class LiveBarBuilder:
         # applied at the next finalization: [notional, vwap volume, volume]
         self._adjust = [0.0, 0, 0]
         self._late_unknown = False
+        self._late_flag = "late_unknown_condition"
         self._counts = {"late": 0, "late_unresolved": 0, "corrections": 0, "unmatched": 0}
         # finalized trades by key -> slot, and each slot's per-trade contributions
         self._slot_of: dict[tuple[str, int], int] = {}
@@ -119,7 +120,11 @@ class LiveBarBuilder:
         if cls.last == "YES":
             return tr.price * tr.size, tr.size, vol
         if cls.last != "NO":
+            # whether it counts toward VWAP depends on the SIP last-sale state at its own moment,
+            # which we cannot reconstruct. Never guessed: the next slot is uncertain (D-50).
             self._counts["late_unresolved"] += 1
+            self._late_unknown = True
+            self._late_flag = "late_state_dependent_trade"
         return 0.0, 0, vol
 
     def _apply(self, c: tuple[float, int, int], sign: int) -> None:
@@ -194,7 +199,7 @@ class LiveBarBuilder:
             self.cum_tot += self._adjust[2]
         flags = list(row["flags"])
         if self._late_unknown:
-            flags.append("late_unknown_condition")
+            flags.append(self._late_flag)
         row.update(
             slot=m,
             bar_start=self.bar_start(m),
@@ -210,6 +215,7 @@ class LiveBarBuilder:
             **{f"{k}_total": v for k, v in self._counts.items()},
         )
         self._adjust, self._late_unknown = [0.0, 0, 0], False
+        self._late_flag = "late_unknown_condition"
         self.finalized = m
         return row
 

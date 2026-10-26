@@ -85,8 +85,8 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 
 - [x] Order manager: persist intent and client order ID before submission (OM-02) (src/tournament/orders: manager, store with migration 0001, broker boundary; D-60 to D-62 drafts)
 - [x] Timeout handling that reconciles before retrying (OM-03) (lookup by client order ID, resubmit only on confirmed absence, same ID)
-- [ ] Position manager with exit precedence and no duplicate liquidations (EX-03, EX-05) (order side done: one exit chain per position, second trigger adds its reason; the loop that evaluates the premium stop and calls it comes with the account runtime)
-- [ ] Reconciliation at startup, after disconnects and periodically (OM-05) (recover() and position reconciliation with entry blocking built and tested; periodic scheduling and balance checks come with the runtime)
+- [x] Position manager with exit precedence and no duplicate liquidations (EX-03, EX-05) (account runtime loop: premium stop, cutoff, daily limit, reference exits; one exit chain per position, later triggers add their reason; exits re-priced from a fresh bid, forced exits to market, discretionary ones wait and alert when nothing is bid)
+- [x] Reconciliation at startup, after disconnects and periodically (OM-05) (restart recovery from the journal and the durable accounts, in-flight orders settled before new work, positions compared with the broker's every 5 minutes and after the close, entries blocked on a mismatch; D-62, D-67. Balance checks come with the paper broker in Step 4)
 
 **Startup and operations**
 

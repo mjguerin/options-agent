@@ -70,6 +70,8 @@ for out in outs:
         finalize_delay=pd.Timedelta(seconds=2).to_pytimedelta(),
         halt_codes=frozenset({"H", "P"}),
         resume_codes=frozenset({"T"}),
+        informational_codes=frozenset({"Q"}),
+        unknown_status_hold=timedelta(seconds=60),
         stale_after=pd.Timedelta(hours=1).to_pytimedelta(),
     )
     eng = ShadowEngine(

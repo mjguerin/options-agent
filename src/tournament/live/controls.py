@@ -44,6 +44,7 @@ class ControlPlane:
         self._last_poll: pd.Timestamp | None = None
         self._last_state: pd.Timestamp | None = None
         self.applied = 0
+        self.seq = 0
 
     def tick(self, now: pd.Timestamp) -> None:
         every = pd.Timedelta(seconds=self.cfg.state.every_s)
@@ -133,9 +134,16 @@ class ControlPlane:
                 "operator_halt": rt.operator_halt,
                 "entries_blocked": rt.orders.entries_blocked,
                 "positions": rt.store.filled_by_symbol(binding),
+                "exit_blind": sorted(rt.orders.blind),
                 "pending_orders": len(rt.store.active(binding)),
                 "exposure_usd": round(rt.ledger.exposure_usd(binding), 2),
                 "realized_pnl_usd": round(rt.realized_pnl(), 2),
+                "pnl_view": {
+                    k: round(v, 2) if isinstance(v, float) else v
+                    for k, v in rt.guard.risk_view(
+                        rt.realized_pnl(), rt._open_positions(now)
+                    ).items()
+                },
                 "decisions": len(rt.decisions),
             }
         feeds = {"stock": {"connected": s.health.connected}}
@@ -145,7 +153,9 @@ class ControlPlane:
                 "error": self.collector.error,
                 "lag_s": self.collector.feed.book.lag_percentiles(),
             }
+        self.seq += 1
         return {
+            "seq": self.seq,  # a reader sees stale state as a number that stopped moving
             "at": now.isoformat(),
             "session": s.day.session_date.isoformat(),
             "mode": self.mode,

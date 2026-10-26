@@ -33,6 +33,12 @@ exit:
   max_replacements: 3                # each replacement lowers the limit
   replacement_step_ticks: 1
   final_fallback: market             # market | none: after the last replacement times out
+  # No usable bid (zero, stale or crossed quote): never invent a price. A forced exit goes to
+  # the market; a discretionary one waits for a usable bid and raises an incident (EX-06).
+  forced_reasons: [SESSION_CUTOFF, OPERATOR_CLOSE, OPERATOR_FLATTEN, OPERATOR_FLATTEN_ACCOUNT, OPERATOR_EMERGENCY, DAILY_LOSS_FLATTEN]
+  no_usable_bid_forced: market       # market | hold
+  no_usable_bid_discretionary: hold  # market | hold
+  blind_alert_after_s: 15            # an exit with no usable bid this long is an incident
 
 submission:
   ack_timeout_s: 3                   # no reply to a submission: reconcile, never resubmit blindly
@@ -46,6 +52,7 @@ simulation:                          # shadow mode only: the modeled broker (BRD
   fill_delay_s: 1.0                  # an order fills once it is this old and still marketable
   buy_fill: ask                      # price a marketable buy fills at (price improvement over the limit)
   sell_fill: bid                     # price a marketable sell fills at
+  size_cap: displayed                # displayed | none: a fill never exceeds the size quoted at the touch
 
 reconciliation:
   quantity_tolerance: 0              # contracts of difference tolerated between us and the broker

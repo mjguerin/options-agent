@@ -42,6 +42,8 @@ def start(workers):
         finalize_delay=timedelta(seconds=2),
         halt_codes=frozenset({"H", "P"}),
         resume_codes=frozenset({"T"}),
+        informational_codes=frozenset({"Q"}),
+        unknown_status_hold=timedelta(seconds=60),
         stale_after=timedelta(hours=1),
     )
     eng = ShadowEngine(s, workers, PriorContext(0.2, 501, 499, 500), None, usage=Usage.LIVE)

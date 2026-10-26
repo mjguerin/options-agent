@@ -56,6 +56,7 @@ class OrderManager:
         store: IntentStore,
         cfg: OrdersConfig,
         sleep: Callable[[float], None] = time.sleep,
+        quotes: Callable[[str, pd.Timestamp], tuple[float | None, float | None]] | None = None,
     ) -> None:
         self.account, self.broker, self.store, self.cfg, self.sleep = (
             account,
@@ -65,6 +66,10 @@ class OrderManager:
             sleep,
         )
         self.entries_blocked: str | None = None
+        # a usable (bid, ask) for a contract at a time, or (None, None); how exits are re-priced
+        self.quotes = quotes or (lambda symbol, now: (None, None))
+        # exits waiting for a usable bid: symbol -> {since, candidate_id, strategy_id, reasons}
+        self.blind: dict[str, dict] = {}
 
     # ---- ids and prices -----------------------------------------------------------------
     def client_order_id(self, candidate_id: str, purpose: Purpose, n: int) -> str:
@@ -78,12 +83,19 @@ class OrderManager:
         basis = ask if e.price_basis == "ask" else (bid + ask) / 2
         return _round(basis + e.price_offset_ticks * tick, tick, "up")
 
-    def exit_price(self, bid: float | None, ask: float | None) -> float:
+    def exit_price(self, bid: float, ask: float | None) -> float:
+        """The first exit limit, from a usable bid. With no usable bid there is no price to
+        compute: the caller follows the exit contingency instead (never a fabricated price)."""
         x, tick = self.cfg.exit, self.cfg.pricing.tick_size
-        if bid is None or bid <= 0:
-            return tick  # nothing is bid: the lowest price, so the order can't be left behind
         basis = bid if x.price_basis == "bid" else (bid + (ask if ask else bid)) / 2
         return _round(basis + x.price_offset_ticks * tick, tick, "down")
+
+    def forced(self, reasons) -> bool:
+        return any(r in self.cfg.exit.forced_reasons for r in reasons)
+
+    def _blind_action(self, reasons) -> str:
+        x = self.cfg.exit
+        return x.no_usable_bid_forced if self.forced(reasons) else x.no_usable_bid_discretionary
 
     # ---- entries ------------------------------------------------------------------------
     def place_entry(
@@ -168,10 +180,31 @@ class OrderManager:
             return cur
         qty = self.position(symbol)
         if qty <= 0:
+            self.blind.pop(symbol, None)
             return None
+        usable = bid is not None and bid > 0
+        reasons = (*self.blind.get(symbol, {}).get("reasons", ()), reason)
+        if not usable and self._blind_action(reasons) == "hold":
+            b = self.blind.setdefault(
+                symbol,
+                {
+                    "since": now,
+                    "candidate_id": candidate_id,
+                    "strategy_id": strategy_id,
+                    "reasons": [],
+                },
+            )
+            if reason not in b["reasons"]:
+                b["reasons"].append(reason)
+                self.store.event(self.account, now, "exit_blind", symbol=symbol, reason=reason)
+            return None
+        self.blind.pop(symbol, None)
         chain = self.store.chain(self.account, candidate_id, Purpose.EXIT)
         n = len(chain)  # a new attempt after an exhausted chain keeps IDs unique
         x = self.cfg.exit
+        order_type, price = (
+            (x.order_type, self.exit_price(bid, ask)) if usable else ("market", None)
+        )
         intent = Intent(
             self.client_order_id(candidate_id, Purpose.EXIT, n),
             self.account,
@@ -181,16 +214,18 @@ class OrderManager:
             "sell",
             symbol,
             qty,
-            x.order_type,
-            self.exit_price(bid, ask),
+            order_type,
+            price,
             x.time_in_force,
             Status.PENDING_SUBMIT,
             now,
             replacement=n,
-            reasons=(reason,),
+            reasons=tuple(dict.fromkeys(reasons)),
         )
         self.store.insert(intent)
-        self.store.event(intent.client_order_id, now, "intent", qty=qty, reason=reason)
+        self.store.event(
+            intent.client_order_id, now, "intent", qty=qty, reason=reason, order_type=order_type
+        )
         return self._send(intent, now)
 
     # ---- sending and reconciling ----------------------------------------------------------
@@ -290,6 +325,13 @@ class OrderManager:
 
     # ---- polling, timeouts, replacements --------------------------------------------------
     def poll(self, now: pd.Timestamp) -> list[Intent]:
+        for symbol, b in list(self.blind.items()):  # exits waiting for a usable bid
+            bid, ask = self.quotes(symbol, now)
+            if bid is not None and bid > 0:
+                for reason in list(b["reasons"]):
+                    self.place_exit(
+                        now, b["candidate_id"], b["strategy_id"], symbol, reason, bid, ask
+                    )
         out = []
         for i in self.store.active(self.account):
             if i.status in (Status.SUBMITTED, Status.UNCERTAIN):
@@ -354,11 +396,29 @@ class OrderManager:
             order_type, price = e.order_type, round(first + steps * tick, 10)
         else:
             x = self.cfg.exit
+            # sell only what is still held: the position, not the order's memory, is the truth
+            held = self.position(i.symbol)
+            if min(i.remaining, held) <= 0:
+                self.store.event(i.client_order_id, now, "exit_nothing_left")
+                return i
             if i.replacement < x.max_replacements:
-                order_type = x.order_type
-                price = max(
-                    round((i.limit_price or tick) - x.replacement_step_ticks * tick, 10), tick
-                )
+                bid, _ = self.quotes(i.symbol, now)
+                if bid is None or bid <= 0:
+                    if self._blind_action(i.reasons) == "hold":
+                        self.blind[i.symbol] = {
+                            "since": now,
+                            "candidate_id": i.candidate_id,
+                            "strategy_id": i.strategy_id,
+                            "reasons": list(i.reasons),
+                        }
+                        self.store.event(i.client_order_id, now, "exit_blind", symbol=i.symbol)
+                        return i
+                    order_type, price = "market", None
+                else:
+                    order_type = x.order_type
+                    steps = n * x.replacement_step_ticks  # from a fresh bid, not the last limit
+                    raw = bid + x.price_offset_ticks * tick - steps * tick
+                    price = max(_round(raw, tick, "down"), tick)
             elif x.final_fallback == "market":
                 order_type, price = "market", None
             else:
@@ -372,7 +432,9 @@ class OrderManager:
             i.purpose,
             i.side,
             i.symbol,
-            i.remaining,
+            i.remaining
+            if i.purpose is Purpose.ENTRY
+            else min(i.remaining, self.position(i.symbol)),
             order_type,
             price,
             i.time_in_force,
@@ -385,6 +447,16 @@ class OrderManager:
         self.store.insert(nxt)
         self.store.event(nxt.client_order_id, now, "intent", qty=nxt.qty_intended, limit=price)
         return self._send(nxt, now)
+
+    def unresolved(self, now: pd.Timestamp, older_than_s: float) -> list[Intent]:
+        """Orders whose fate we don't know. They block blind resubmission and raise an incident."""
+        bad = {Status.UNCERTAIN, Status.SUBMITTED, Status.CANCEL_REQUESTED, Status.NOT_FOUND}
+        out = []
+        for i in self.store.all_for(self.account):
+            started = i.submitted_at or i.created_at
+            if i.status in bad and (now - started).total_seconds() >= older_than_s:
+                out.append(i)
+        return out
 
     # ---- exposure checks (OM-05, OM-06) ---------------------------------------------------
     def reconcile_positions(self, now: pd.Timestamp) -> list[tuple[str, int, int]]:

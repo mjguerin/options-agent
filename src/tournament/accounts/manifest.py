@@ -89,6 +89,15 @@ def _file_hash(*paths: Path) -> str:
     return h.hexdigest()
 
 
+def schema_head() -> str:
+    """The database migration this code expects, so a manifest also pins the schema."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    head = ScriptDirectory.from_config(Config(str(REPO_ROOT / "alembic.ini"))).get_current_head()
+    return hashlib.sha256((head or "").encode()).hexdigest()
+
+
 def current_hashes() -> dict[str, str]:
     from tournament.strategies.brt import BRT
     from tournament.strategies.fbr import FBR
@@ -99,6 +108,7 @@ def current_hashes() -> dict[str, str]:
     workers = {w.strategy_id: w for w in (VPC(), ORB(), BRT(), FBR(), VMR())}
     elig = CONFIG / "trade_eligibility"
     out = {
+        "schema": schema_head(),
         "app": app_config().config_hash,
         "feed": _file_hash(CONFIG / "live" / "feed-v1.yaml"),
         "risk": load_risk_config().config_hash,

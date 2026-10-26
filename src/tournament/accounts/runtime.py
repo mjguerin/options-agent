@@ -155,6 +155,32 @@ class AccountRuntime:
             self.ledger.release(now, self.binding, cid, "BROKER_REJECTED")
         return EntryDecision(cid, True, (), sel, size, intent)
 
+    def restore_state(self) -> dict:
+        """After a restart, bring back what must survive a crash: the daily-limit halt, an
+        operator pause or flatten, and an entry block. They are read back from the account's own
+        event log, in order, so the last word wins (a resume after a pause clears it)."""
+        restored: dict = {}
+        for kind, detail in self.store.events(self.binding):
+            if kind == "operator_pause":
+                self.operator_halt = "OPERATOR_PAUSE"
+            elif kind == "operator_flatten":
+                self.operator_halt = detail.get("reason", "OPERATOR_FLATTEN")
+            elif kind == "operator_resume":
+                self.operator_halt = None
+            elif kind == "daily_limit":
+                self.halted = "DAILY_LIMIT"
+            elif kind == "entries_blocked":
+                self.orders.entries_blocked = f"restored after restart: {detail.get('diffs', '')}"
+            elif kind == "entries_unblocked":
+                self.orders.entries_blocked = None
+        if self.operator_halt:
+            restored["operator_halt"] = self.operator_halt
+        if self.halted:
+            restored["halted"] = self.halted
+        if self.orders.entries_blocked:
+            restored["entries_blocked"] = self.orders.entries_blocked
+        return restored
+
     # ---- operator controls (BRD 14; RK-02) ---------------------------------------------------
     # Pausing entries, cancelling pending orders and closing positions are different things and
     # are different methods. None of them changes strategy state (D-33).
@@ -204,7 +230,9 @@ class AccountRuntime:
                 self._exit(now, self._candidate_of(symbol), symbol, reason)
                 closed.append(symbol)
         self.operator_halt = reason
-        self.store.event(self.binding, now, "operator_flatten", cancelled=cancelled, closed=closed)
+        self.store.event(
+            self.binding, now, "operator_flatten", reason=reason, cancelled=cancelled, closed=closed
+        )
         return {"cancelled_entries": cancelled, "exits_placed": closed}
 
     # ---- the strategy's reference exit (D-33, D-34) -----------------------------------------
@@ -215,8 +243,10 @@ class AccountRuntime:
 
     def _exit(self, now: pd.Timestamp, candidate_id: str, symbol: str, reason: str) -> None:
         v = self.quotes.view(symbol, now)
-        bid = v.quote.bid if v.quote is not None else None
-        ask = v.quote.ask if v.quote is not None else None
+        # only a usable quote gives a price; otherwise the order manager follows the exit
+        # contingency (market for a forced exit, wait and alert for a discretionary one)
+        bid = v.quote.bid if (v.usable and v.quote is not None) else None
+        ask = v.quote.ask if (v.usable and v.quote is not None) else None
         x = self.orders.place_exit(now, candidate_id, self.strategy_id, symbol, reason, bid, ask)
         if x is not None:
             self.exits_requested.append((now, symbol, reason))

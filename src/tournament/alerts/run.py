@@ -21,8 +21,10 @@ from tournament.alerts.watchdog import (
     check_disk,
     check_engine,
     check_nightly,
+    check_supervisor,
     last_weekday_due,
     read_heartbeat,
+    supervisor_status,
 )
 from tournament.appconfig import app_config
 from tournament.secrets import load_telegram_credentials
@@ -56,6 +58,7 @@ def build_watches(cfg: AlertsConfig, repo: Path, engine, today_session) -> list:
         engine_watch,
         nightly_watch,
         lambda now: check_backup(now, Path(w.backup_log).expanduser(), w),
+        lambda now: check_supervisor(supervisor_status(repo / w.supervisor_conf, w.supervisorctl)),
         lambda now: check_disk(repo / w.disk_path, w),
         lambda now: check_database(engine),
     ]

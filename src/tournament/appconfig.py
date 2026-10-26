@@ -123,6 +123,7 @@ class Engine(_Section):
     start_time: str
     launch_time: str
     late_after_close_s: float = Field(ge=0)
+    post_close_s: float = Field(ge=0)
     startsecs: int = Field(ge=1)
     restart_attempts: int = Field(ge=0)
     stop_wait_s: int = Field(gt=0)
@@ -134,9 +135,19 @@ class Engine(_Section):
         return v
 
 
+class Quality(_Section):
+    check_last_n_sessions: int = Field(ge=1)
+    min_spy_trades: int = Field(ge=0)
+    min_spy_bars: int = Field(ge=0)
+    min_option_contracts: int = Field(ge=0)
+    min_option_bars: int = Field(ge=0)
+
+
 class Nightly(_Section):
     start_time: str
     weekdays_only: bool
+    after_close_min: float = Field(ge=0)
+    quality: Quality
 
     @field_validator("start_time")
     @classmethod

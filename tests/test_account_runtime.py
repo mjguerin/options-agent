@@ -13,7 +13,7 @@ from tournament.accounts.reservations import (
     ReservationLedger,
 )
 from tournament.accounts.runtime import AccountRouter, AccountRuntime, WrongAccount
-from tournament.live.quotes import OptionFeed
+from tournament.live.quotes import OptionFeed, usable_touch
 from tournament.orders.config import load_orders_config
 from tournament.orders.manager import OrderManager
 from tournament.orders.model import Purpose, Status
@@ -45,7 +45,12 @@ class Market:
 
     def __init__(self):
         self.feed = OptionFeed(
-            pd.Timedelta(seconds=5), pd.Timedelta(seconds=2), pd.Timedelta(seconds=60), 5000
+            pd.Timedelta(seconds=5),
+            pd.Timedelta(seconds=2),
+            pd.Timedelta(seconds=60),
+            5000,
+            pd.Timedelta(seconds=0.25),
+            600,
         )
         self.feed.on_connected(T0 - pd.Timedelta(minutes=5))
 
@@ -54,18 +59,21 @@ class Market:
              "as": ask_size, "bx": "C", "ax": "C", "c": "A"}  # fmt: skip
         self.feed.on_messages([m], now + pd.Timedelta(milliseconds=5))
 
-    def touch(self, symbol):
-        q = self.feed.book.quotes.get(symbol)
-        return (q.bid, q.ask) if q else (None, None)
-
 
 def build(binding="acct:vpc", strategy="vpc", risk=RISK, market=None, engine=None, cash=10_000.0):
     market = market or Market()
     engine = engine or memory_engine()
     store = IntentStore(engine)
     ocfg = load_orders_config()
-    sim = SimBroker(market.touch, ocfg.simulation, cash, risk.sizing.contract_multiplier)
-    mgr = OrderManager(binding, sim, store, ocfg, sleep=lambda s: None)
+    sim = SimBroker(market.feed, ocfg.simulation, cash, risk.sizing.contract_multiplier)
+    mgr = OrderManager(
+        binding,
+        sim,
+        store,
+        ocfg,
+        sleep=lambda s: None,
+        quotes=lambda s, now: usable_touch(market.feed.view(s, now)),
+    )
     ledger = ReservationLedger(engine, risk.limits, risk.sizing.contract_multiplier)
     rt = AccountRuntime(
         binding, strategy, risk, mgr, store, ledger, market.feed, sim, chain(), TODAY,

@@ -53,6 +53,10 @@ class Exit(_Section):
     max_replacements: int = Field(ge=0, le=10)
     replacement_step_ticks: int = Field(ge=1)
     final_fallback: Literal["market", "none"]
+    forced_reasons: list[str]
+    no_usable_bid_forced: Literal["market", "hold"]
+    no_usable_bid_discretionary: Literal["market", "hold"]
+    blind_alert_after_s: float = Field(gt=0)
 
 
 class Submission(_Section):
@@ -68,6 +72,7 @@ class Simulation(_Section):
     fill_delay_s: float = Field(ge=0)
     buy_fill: Literal["ask", "limit"]
     sell_fill: Literal["bid", "limit"]
+    size_cap: Literal["displayed", "none"]
 
 
 class Reconciliation(_Section):

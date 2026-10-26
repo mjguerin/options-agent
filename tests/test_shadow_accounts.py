@@ -20,7 +20,7 @@ def build(tmp_path):
     day = SessionDay(
         pd.Timestamp("2026-10-26").date(), at(0).to_pydatetime(), at(23 * 60 + 600).to_pydatetime()
     )
-    acc = ShadowAccounts(day, collector, SIDS, 10_000.0, 10, tmp_path / "a.sqlite", 1.0)
+    acc = ShadowAccounts(day, collector, SIDS, 10_000.0, 10, tmp_path / "a.sqlite", 1.0, 300.0)
     return acc, m
 
 
@@ -104,3 +104,20 @@ def test_the_harness_calls_the_hooks_and_replay_without_hooks_is_unchanged():
     plain = ReplayRun([Scripted({300: spec(inv=490, target=510)})], run_id="t", dataset_id="t")
     assert len(plain.run_outputs([session(FLAT)]).candidates) == len(res.candidates) == 1
     assert T0  # the shared fixtures module is imported for its helpers
+
+
+def test_books_are_compared_with_the_broker_periodically_and_a_difference_blocks_entries(tmp_path):
+    acc, m = build(tmp_path)
+    prices(m, at(0))
+    acc._candidate(record("u", "vpc"))
+    for s in (1.5, 2.5):
+        prices(m, at(s))
+        acc.tick(at(s))
+    vpc = acc.router.runtimes["acct:vpc"]
+    assert vpc.orders.entries_blocked is None
+    sim = acc.brokers["acct:vpc"]
+    next(iter(sim.orders.values()))["filled"] = 9  # the modeled broker now disagrees
+    acc.tick(at(10.0))  # not yet due: the first comparison was at t = 1.5
+    assert vpc.orders.entries_blocked is None
+    acc.tick(at(310.0))
+    assert vpc.orders.entries_blocked and "position mismatch" in vpc.orders.entries_blocked

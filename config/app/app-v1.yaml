@@ -49,6 +49,7 @@ engine:                              # the daily engine job (BRD 9.3, 10.2)
   start_time: "03:55"                # exchange local time: wait for it, so pre-market is covered
   launch_time: "03:50"               # when launchd starts the Supervisor program (a few min early)
   late_after_close_s: 0              # a start later than close + this does nothing
+  post_close_s: 120                  # keep running this long after the close to settle and reconcile
   startsecs: 10                      # Supervisor counts a start only after this many seconds up
   restart_attempts: 3                # Supervisor start retries after a crash
   stop_wait_s: 60                    # Supervisor waits this long for a clean stop
@@ -56,6 +57,13 @@ engine:                              # the daily engine job (BRD 9.3, 10.2)
 nightly:                             # after-close job: history download and checks
   start_time: "16:45"                # exchange local time; the download guard ends at 16:30
   weekdays_only: true
+  after_close_min: 45                # never download today's session before close + this
+  quality:                           # a dataset must exist AND look like a real session
+    check_last_n_sessions: 10
+    min_spy_trades: 20000
+    min_spy_bars: 300                # one-minute bars, 04:00 to the end of after-hours
+    min_option_contracts: 1
+    min_option_bars: 1000
 
 performance:
   classify_cache_size: 4096          # distinct sale-condition combinations cached

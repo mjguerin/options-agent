@@ -125,6 +125,23 @@ class SessionMonitor:
                 self.inc.open(now, "ENTRIES_BLOCKED", rt.orders.entries_blocked, binding)
             else:
                 self.inc.resolve(now, "ENTRIES_BLOCKED", binding)
+            blind_after = rt.orders.cfg.exit.blind_alert_after_s
+            blind = [
+                s
+                for s, b in rt.orders.blind.items()
+                if (now - b["since"]).total_seconds() >= blind_after
+            ]
+            if blind:
+                self.inc.open(now, "EXIT_BLIND", ", ".join(blind), binding)
+            else:
+                self.inc.resolve(now, "EXIT_BLIND", binding)
+            stuck = rt.orders.unresolved(now, self.cfg.monitor.order_unresolved_after_s)
+            if stuck:
+                self.inc.open(
+                    now, "ORDER_UNRESOLVED", ", ".join(i.client_order_id for i in stuck), binding
+                )
+            else:
+                self.inc.resolve(now, "ORDER_UNRESOLVED", binding)
             held = rt.store.filled_by_symbol(binding)
             if now >= self.flat_deadline and held:
                 self.inc.open(

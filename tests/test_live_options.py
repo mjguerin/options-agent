@@ -50,7 +50,14 @@ def q(ts, bid=1.00, ask=1.05, symbol=SYM, bs=10, as_=12):
 
 
 def feed():
-    f = OptionFeed(pd.Timedelta(seconds=5), pd.Timedelta(seconds=2), pd.Timedelta(seconds=10), 5000)
+    f = OptionFeed(
+        pd.Timedelta(seconds=5),
+        pd.Timedelta(seconds=2),
+        pd.Timedelta(seconds=10),
+        5000,
+        pd.Timedelta(seconds=0.25),
+        600,
+    )
     f.on_connected(sec(-60))
     return f
 
@@ -121,8 +128,8 @@ def test_sync_sends_only_the_difference_and_resubscribes_after_reconnect():
     asyncio.run(s.sync(ws))  # nothing changed: nothing sent
     assert ws.sent == [
         {"action": "subscribe", "quotes": ["A", "B"]},
+        {"action": "subscribe", "quotes": ["C"]},  # first: B never goes without quotes
         {"action": "unsubscribe", "quotes": ["A"]},
-        {"action": "subscribe", "quotes": ["C"]},
     ]
     ws2 = FakeWs()
     asyncio.run(s.on_authenticated(ws2))  # a fresh connection subscribes everything again
