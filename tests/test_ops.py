@@ -35,14 +35,14 @@ def utc(s):
 
 
 def test_the_start_moment_is_the_configured_exchange_time():
-    assert start_moment(DAY, CFG) == utc("2026-10-26T07:55:00")  # 03:55 ET (EDT) is 07:55 UTC
+    assert start_moment(DAY, CFG) == utc("2026-10-26T07:35:00")  # 03:35 ET (EDT) is 07:35 UTC
 
 
 @pytest.mark.parametrize(
     "now, action",
     [
-        ("2026-10-26T07:40:00", Action.WAIT),  # launchd fired early
-        ("2026-10-26T07:55:00", Action.RUN),
+        ("2026-10-26T07:25:00", Action.WAIT),  # launchd fired early
+        ("2026-10-26T07:35:00", Action.RUN),
         ("2026-10-26T15:10:00", Action.RUN),  # a restart mid-session
         ("2026-10-26T20:00:00", Action.SKIP_TOO_LATE),
         ("2026-10-26T21:30:00", Action.SKIP_TOO_LATE),
@@ -57,7 +57,7 @@ def test_a_day_without_a_session_is_skipped():
 
 
 def test_the_wait_length_is_exact():
-    p = engine_plan(utc("2026-10-26T07:50:00"), DAY, CFG)
+    p = engine_plan(utc("2026-10-26T07:30:00"), DAY, CFG)
     assert p.wait_s == 300
 
 
@@ -105,7 +105,7 @@ def faked(monkeypatch):
 
 
 def test_run_daily_waits_then_runs_the_session(faked, tmp_path):
-    clock = Clock("2026-10-26T07:30:00")
+    clock = Clock("2026-10-26T07:10:00")
     code = engine_job.run_daily(Path("."), tmp_path / "live", clock.now, clock.sleep)
     assert code == 0 and faked["ran"][1] == "shadow"
     assert sum(clock.slept) >= 25 * 60 and max(clock.slept) <= engine_job.WAIT_SLICE_S
@@ -113,7 +113,7 @@ def test_run_daily_waits_then_runs_the_session(faked, tmp_path):
 
 def test_run_daily_skips_a_non_session_day_after_holding_for_supervisor(faked, tmp_path):
     faked["days"] = []
-    clock = Clock("2026-10-26T07:30:00")
+    clock = Clock("2026-10-26T07:10:00")
     assert engine_job.run_daily(Path("."), tmp_path / "live", clock.now, clock.sleep) == 0
     assert "ran" not in faked and clock.slept == [CFG.engine.startsecs + 2]
 
@@ -201,7 +201,7 @@ def test_launchd_starts_the_engine_on_weekdays_at_the_launch_time(rendered):
     plist = plistlib.loads(rendered["engine-start.plist"].read_bytes())
     days = plist["StartCalendarInterval"]
     assert [d["Weekday"] for d in days] == [1, 2, 3, 4, 5]
-    assert {(d["Hour"], d["Minute"]) for d in days} == {(3, 50)}
+    assert {(d["Hour"], d["Minute"]) for d in days} == {(3, 30)}
     assert plist["ProgramArguments"][-2:] == ["start", "engine"] and plist["UserName"] == "mgmini"
 
 

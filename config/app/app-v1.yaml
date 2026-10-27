@@ -46,8 +46,10 @@ history:
 
 engine:                              # the daily engine job (BRD 9.3, 10.2)
   manifest: null                     # path of the experiment manifest to run under; null = none
-  start_time: "03:55"                # exchange local time: wait for it, so pre-market is covered
-  launch_time: "03:50"               # when launchd starts the Supervisor program (a few min early)
+  start_time: "03:35"                # exchange local time: wait for it. Loading history and warming
+                                     # up takes about 7 minutes and grows with the history, so the
+                                     # feeds must attach well before the 04:00 pre-market start
+  launch_time: "03:30"               # when launchd starts the Supervisor program (a few min early)
   late_after_close_s: 0              # a start later than close + this does nothing
   post_close_s: 120                  # keep running this long after the close to settle and reconcile
   startsecs: 10                      # Supervisor counts a start only after this many seconds up

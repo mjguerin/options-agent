@@ -66,7 +66,10 @@ def page_overview(b, status: dict) -> None:
     st.subheader("Accounts")
     table = data.accounts_table(state)
     if table.empty:
-        st.info("No accounts reported yet: the engine runs from 03:55 ET on session days.")
+        st.info(
+            "No accounts reported yet: the engine starts at 03:35 ET on session days and is "
+            "ready by about 03:45."
+        )
     else:
         table.insert(1, "", table["status"].map(STATUS_ICON))
         st.dataframe(table, hide_index=True, use_container_width=True)

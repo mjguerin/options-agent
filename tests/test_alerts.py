@@ -233,13 +233,13 @@ def engine_findings(now, hb):
 
 def test_a_missing_or_silent_engine_is_found_only_while_it_should_be_running():
     beating = {"session": "2026-10-26", "at": "2026-10-26T12:00:00+00:00"}
-    assert engine_findings("2026-10-26T07:58:00Z", None) == {
+    assert engine_findings("2026-10-26T08:10:00Z", None) == {
         "ENGINE_NOT_STARTED": False,
         "ENGINE_SILENT": False,
     }
-    assert engine_findings("2026-10-26T08:10:00Z", None)["ENGINE_NOT_STARTED"] is True
+    assert engine_findings("2026-10-26T08:20:00Z", None)["ENGINE_NOT_STARTED"] is True
     yesterday = {"session": "2026-10-23", "at": "2026-10-23T19:00:00+00:00"}
-    assert engine_findings("2026-10-26T08:10:00Z", yesterday)["ENGINE_NOT_STARTED"] is True
+    assert engine_findings("2026-10-26T08:20:00Z", yesterday)["ENGINE_NOT_STARTED"] is True
     assert engine_findings("2026-10-26T12:00:30Z", beating) == {
         "ENGINE_NOT_STARTED": False,
         "ENGINE_SILENT": False,
