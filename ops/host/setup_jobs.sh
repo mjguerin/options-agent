@@ -16,6 +16,21 @@ UV=/opt/homebrew/bin/uv
 STAGE="$(mktemp -d /private/tmp/options-tournament-stage.XXXXXX)"
 chown "$OWNER" "$STAGE"  # the owner renders into it
 step() { printf '\n== %s\n' "$*"; }
+reload_daemon() {  # reload_daemon <label> <plist>: bootout can return before the job is gone
+    local label="$1" plist="$2" i
+    launchctl bootout "system/$label" 2>/dev/null || true
+    for i in $(seq 1 30); do
+        launchctl print "system/$label" >/dev/null 2>&1 || break
+        sleep 0.5
+    done
+    for i in 1 2 3 4 5 6; do
+        launchctl bootstrap system "$plist" && return 0
+        sleep 2
+    done
+    echo "could not load $label" >&2
+    return 1
+}
+
 
 step "Time zone: launchd fires on the host's local time"
 echo "  host zone: $(readlink /etc/localtime | sed 's|.*/zoneinfo/||')"
@@ -33,8 +48,7 @@ for job in supervisor engine-start nightly; do
     label="com.options-tournament.$job"
     plutil -lint "$STAGE/$job.plist" >/dev/null
     install -o root -g wheel -m 644 "$STAGE/$job.plist" "/Library/LaunchDaemons/$label.plist"
-    launchctl bootout "system/$label" 2>/dev/null || true
-    launchctl bootstrap system "/Library/LaunchDaemons/$label.plist"
+    reload_daemon "$label" "/Library/LaunchDaemons/$label.plist"
     echo "  loaded $label"
 done
 

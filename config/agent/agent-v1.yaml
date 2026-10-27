@@ -42,7 +42,7 @@ narrative:
   timeout_s: 900
   prompt_file: config/agent/narrative-prompt-v1.md
   allowed_tools: [Read, Grep, Glob]  # read the view only: no shell, no network, no writes
-  disallowed_tools: [Bash, Write, Edit, NotebookEdit, WebFetch, WebSearch, Task]
+  disallowed_tools: [Bash, Write, Edit, NotebookEdit, WebFetch, WebSearch, Task, ToolSearch]
   output_format: stream-json         # every tool call is logged (AG-08) and audited (audit_file)
   audit_file: audit/agent-audit.jsonl   # under shared_root: one line per attempted tool call
   min_words: 80                      # shorter output is treated as a failure, not published
@@ -51,4 +51,4 @@ interactive:                         # the owner's own sessions as the agent use
   # No shell: psql can run shell commands, so Bash is off. Questions are answered from the view
   # (ledgers, facts, specs, code). Database access for analysis is a separate, audited tool.
   allowed_tools: [Read, Grep, Glob]
-  disallowed_tools: [Bash, Write, Edit, NotebookEdit, WebFetch, WebSearch, Task]
+  disallowed_tools: [Bash, Write, Edit, NotebookEdit, WebFetch, WebSearch, Task, ToolSearch]

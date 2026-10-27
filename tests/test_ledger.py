@@ -8,6 +8,7 @@ from datetime import date
 import pandas as pd
 import pytest
 import yaml
+from sqlalchemy import func, select
 
 from tournament.ledger.build import NO_EXIT_QUOTE, OPEN_AT_END, broker_fills, build_trades
 from tournament.ledger.config import (
@@ -417,9 +418,10 @@ def test_a_session_ledger_is_written_once_and_a_correction_appends_a_revision(st
     idx = pd.to_datetime([at(0), at(30)])
     eq = pd.DataFrame(
         {"realized_usd": [0.0, 0.0], "unrealized_usd": [0.0, 30.0], "estimated_usd": [0.0, 30.0],
-         "risk_usd": [0.0, 30.0], "exposure_usd": [0.0, 300.0]}, index=idx,
+         "risk_usd": [0.0, 30.0], "exposure_usd": [0.0, 300.0], "unmarked": [0, 1]}, index=idx,
     )  # fmt: skip
     led = session_ledger(store, equity=eq)
+    assert "unmarked" in led["equity"][0]  # the file keeps it; the table is not required to
     lid, rev, created = write_session(engine, "exp-1", "shadow", led, at(1000))
     assert (rev, created) == (1, True)
     again = write_session(engine, "exp-1", "shadow", led, at(2000))
@@ -428,11 +430,12 @@ def test_a_session_ledger_is_written_once_and_a_correction_appends_a_revision(st
     _, rev2, created2 = write_session(engine, "exp-1", "shadow", changed, at(3000))
     assert (rev2, created2) == (2, True)
     with engine.connect() as c:
-        from sqlalchemy import func, select
-
         assert c.execute(select(func.count()).select_from(ledger_trades)).scalar() == 8  # 4 + 4
         assert c.execute(select(func.count()).select_from(ledger_fills)).scalar() == 14
         assert c.execute(select(func.count()).select_from(ledger_equity)).scalar() == 4
+    with engine.connect() as c:
+        detail = json.loads(c.execute(select(ledger_trades.c.detail)).scalars().first())
+    assert detail["entry_benchmark"][0]["quantity"] == 10  # the benchmark travels into the table
     newest = latest_sessions(engine, "exp-1", "shadow")
     assert len(newest) == 1 and newest[0]["revision"] == 2
     assert newest[0]["summary"]["open_estimate_usd"] == 0.0 and json.dumps(newest[0]["metrics"])

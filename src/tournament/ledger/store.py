@@ -168,6 +168,8 @@ def write_session(
                                 "premium_usd",
                                 "open_qty",
                                 "right",
+                                "entry_benchmark",
+                                "exit_benchmark",
                             )
                         },
                         default=str,
@@ -176,8 +178,12 @@ def write_session(
             )
         for f in body["fills"]:
             c.execute(insert(ledger_fills).values(ledger_id=lid, **{**f, "at": _t(f["at"])}))
+        columns = set(ledger_equity.c.keys())
         for e in body["equity"]:
-            c.execute(insert(ledger_equity).values(ledger_id=lid, **{**e, "at": _t(e["at"])}))
+            # the file keeps every field of the point (marks left incomplete, for one); the
+            # table keeps the columns it has
+            row = {k: v for k, v in e.items() if k in columns and k != "at"}
+            c.execute(insert(ledger_equity).values(ledger_id=lid, at=_t(e["at"]), **row))
     return lid, revision, True
 
 
