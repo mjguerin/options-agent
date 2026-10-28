@@ -185,6 +185,8 @@ def test_the_alert_bot_and_the_api_run_all_day_and_restart_themselves(rendered, 
     p = cp[f"program:{program}"]
     assert p["autostart"] == "true" and p["autorestart"] == "true"
     assert f"tournament {cmd}" in p["command"]
+    # a stop must take the program's own children (Streamlit, for one) or the port stays taken
+    assert p["stopasgroup"] == "true" and p["killasgroup"] == "true"
 
 
 def test_the_engine_program_follows_the_app_config(rendered):
@@ -221,3 +223,27 @@ def test_the_supervisor_daemon_is_kept_alive_and_separate_from_homebrews(rendere
 
 def test_weekday_calendar_can_be_every_day():
     assert calendar_xml("03:50", False).count("<dict>") == 1
+
+
+# ---- tctl: the handy controls ------------------------------------------------------------------
+
+TCTL = Path(__file__).resolve().parents[1] / "ops" / "bin" / "tctl"
+
+
+def test_tctl_parses_and_its_help_lists_every_command():
+    import subprocess
+
+    assert subprocess.run(["bash", "-n", str(TCTL)]).returncode == 0
+    out = subprocess.run([str(TCTL), "help"], capture_output=True, text=True).stdout
+    for word in ("status", "health", "session", "incidents", "ledgers", "logs", "dashboard",
+                 "tunnel", "restart", "reload-config", "test"):  # fmt: skip
+        assert word in out
+
+
+def test_tctl_refuses_an_unknown_command_and_never_includes_the_engine_in_all():
+    import subprocess
+
+    bad = subprocess.run([str(TCTL), "nonsense"], capture_output=True, text=True)
+    assert bad.returncode == 2 and "controls for the tournament" in bad.stdout
+    text = TCTL.read_text()
+    assert "SERVICES=(alerts api dashboard)" in text  # "all" is these three, never the engine

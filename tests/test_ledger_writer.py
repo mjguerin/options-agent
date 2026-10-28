@@ -108,3 +108,42 @@ def test_incidents_that_day_travel_with_the_numbers():
     got = incident_counts(Store(), date(2026, 10, 26), "acct:vpc")
     assert got == {"STOCK_FEED_DOWN": 1, "DAILY_LIMIT_HALT": 1}  # another day's and account's out
     assert incident_counts(None, date(2026, 10, 26), "acct:vpc") == {}
+
+
+def test_the_whole_close_path_runs_on_the_files_the_engine_really_writes(tmp_path):
+    """The engine's own history file (every field it writes, including the marks flag), through
+    the ledger writer, into a database with the real tables: no step is replaced by a stand-in.
+    Two bugs hid in this path because the earlier tests gave the writer no history at all."""
+    from sqlalchemy import func, select
+    from test_api import CFG as API_CFG
+
+    from tournament.ledger.store import ledger_equity, ledger_trades
+    from tournament.live.controls import ControlPlane
+
+    rt, acc, session = traded(tmp_path)
+    plane = ControlPlane(
+        None, API_CFG, {rt.binding: rt}, tmp_path / "state.json", session, "shadow"
+    )
+    for s in (0, 31, 62):  # the points the engine would have written through the session
+        plane.tick(t_at(s))
+    history = tmp_path / "state_history" / "2026-10-26.jsonl"
+    written = [json.loads(x) for x in history.read_text().splitlines()]
+    assert len(written) == 3 and {"unmarked", "risk_pnl_usd"} <= set(
+        written[0]["accounts"][rt.binding]
+    )
+
+    engine = memory_engine()
+    out = tmp_path / "ledger"
+    res = write_session_ledgers(
+        acc, session, CFG, t_at(70), "exp-1", "shadow", out, history, None, engine
+    )
+    assert res["accounts"][rt.binding]["stored"] == {"revision": 1, "new": True}  # not an error
+    body = json.loads((out / "acct_vpc.json").read_text())
+    assert body["metrics"]["equity_points"] == 3 and body["metrics"]["max_drawdown_usd"] == 0.0
+    assert body["execution_ledger_name"] == "modeled-execution ledger"
+    assert body["summary"]["result_label"] == "gross of unmodeled costs"
+    with engine.connect() as c:
+        assert c.execute(select(func.count()).select_from(ledger_equity)).scalar() == 3
+        detail = json.loads(c.execute(select(ledger_trades.c.detail)).scalar())
+    (entry,) = detail["entry_benchmark"]
+    assert entry["quantity"] == 13 and entry["quote"] == {}  # this fixture records no quote detail

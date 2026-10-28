@@ -1,0 +1,284 @@
+#!/bin/bash
+# tctl: handy controls for the tournament on the mini. Run from SSH as the owner (no sudo needed
+# except where it says so):   ~/options-agent/ops/bin/tctl help
+#
+# It only wraps what already exists: the tournament's own Supervisor (never the older trading
+# Supervisor), the database, and the files the engine writes. It changes nothing on its own, and
+# anything that could disturb a live session asks for --yes first.
+set -uo pipefail
+
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
+export PATH="/opt/homebrew/bin:/opt/homebrew/opt/postgresql@18/bin:$PATH"
+SUP=(supervisorctl -c "$REPO/data/run/supervisord.conf")
+LOGS="$HOME/Library/Logs/options-tournament"
+DB=options_tournament
+SHARED=/Users/Shared/options-tournament
+SERVICES=(alerts api dashboard)
+DASH_PORT=8501
+API_PORT=8800
+
+say() { printf '%s\n' "$*"; }
+bold() { printf '\n== %s\n' "$*"; }
+sup_up() {  # supervisorctl exits non-zero when any program is stopped, so read what it says
+    ! "${SUP[@]}" status 2>&1 | grep -qiE "no such file|refused|unix:|not running"
+}
+need_sup() {
+    sup_up || {
+        say "The tournament's Supervisor is not running."
+        say "Start it (needs sudo):  sudo launchctl bootstrap system /Library/LaunchDaemons/com.options-tournament.supervisor.plist"
+        exit 1
+    }
+}
+valid_service() { local s; for s in "${SERVICES[@]}" engine; do [[ "$s" == "$1" ]] && return 0; done; return 1; }
+
+engine_live() {  # is the engine beating right now? prints the heartbeat age, returns 0 if fresh
+    python3 - "$REPO/data/run/engine.heartbeat.json" <<'PY'
+import json, sys, datetime as d
+try:
+    hb = json.load(open(sys.argv[1]))
+    age = (d.datetime.now(d.timezone.utc) - d.datetime.fromisoformat(hb["at"])).total_seconds()
+except Exception:
+    sys.exit(1)
+print(f"{age:.0f}")
+sys.exit(0 if age < 90 else 1)
+PY
+}
+
+listener() {  # listener <port>: "pid cmd" of whatever listens on 127.0.0.1:port
+    local pid
+    pid="$(lsof -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null | head -1)"
+    [[ -n "$pid" ]] && printf '%s %s' "$pid" "$(ps -o command= -p "$pid" | cut -c1-90)"
+}
+
+cmd_status() {
+    bold "Programs (the tournament's Supervisor)"
+    need_sup
+    "${SUP[@]}" status
+    bold "Engine"
+    if age="$(engine_live)"; then say "beating, last heartbeat ${age}s ago"; else say "not beating (stopped, between sessions, or loading history)"; fi
+    bold "Schedule (exchange time)"
+    grep -E "^\s+(start_time|launch_time):" "$REPO/config/app/app-v1.yaml" | head -2 | sed 's/^ */  /'
+    say "  TZ now: $(TZ=America/New_York date '+%a %H:%M')"
+}
+
+cmd_health() {
+    local bad=0
+    ok() { printf '  ok    %s\n' "$*"; }
+    no() { printf '  FAIL  %s\n' "$*"; bad=1; }
+    bold "Health"
+    sup_up && ok "Supervisor reachable" || no "Supervisor not running"
+    for s in "${SERVICES[@]}"; do
+        "${SUP[@]}" status "$s" 2>/dev/null | grep -q RUNNING && ok "$s running" || no "$s not running"
+    done
+    psql -d "$DB" -Atc 'select 1' >/dev/null 2>&1 && ok "database answers" || no "database not answering"
+    curl -s -o /dev/null -m 3 "http://127.0.0.1:$DASH_PORT/" && ok "dashboard answers on $DASH_PORT" || no "dashboard not answering on $DASH_PORT"
+    curl -s -o /dev/null -m 3 "http://127.0.0.1:$API_PORT/docs" && ok "API answers on $API_PORT" || no "API not answering on $API_PORT"
+    if age="$(engine_live)"; then ok "engine beating (${age}s)"; else say "  --    engine not beating (normal outside a session)"; fi
+    local open
+    open="$(psql -d "$DB" -Atc 'select count(*) from incidents where closed_at is null' 2>/dev/null || echo '?')"
+    [[ "$open" == "0" ]] && ok "no open incidents" || no "$open open incident(s): tctl incidents"
+    local nightly
+    nightly="$(ls -t "$REPO"/data/ops/nightly_*.json 2>/dev/null | head -1)"
+    [[ -n "$nightly" ]] && ok "last nightly report: $(basename "$nightly")" || no "no nightly report yet"
+    [[ -f "$SHARED/view/VIEW_MANIFEST.json" ]] && ok "agent view published" || no "agent view missing"
+    local free
+    free="$(df -g "$REPO/data" | awk 'NR==2{print $4}')"
+    [[ "${free:-0}" -ge 20 ]] && ok "disk free ${free} GB" || no "disk free only ${free} GB"
+    # a dashboard or API process nobody supervises would block the supervised one
+    for pair in "$DASH_PORT:dashboard" "$API_PORT:api"; do
+        local port="${pair%%:*}" name="${pair##*:}" l pid sup
+        l="$(listener "$port")"
+        if [[ -n "$l" ]]; then
+            pid="${l%% *}"
+            sup="$("${SUP[@]}" pid "$name" 2>/dev/null)"
+            if [[ "$sup" != "$pid" ]] && ! pgrep -P "${sup:-0}" >/dev/null 2>&1; then
+                no "port $port is held by pid $pid, which is not the supervised $name (tctl $name --force)"
+            fi
+        fi
+    done
+    return $bad
+}
+
+cmd_service() {  # start|stop|restart <name|all>
+    local action="$1" target="${2:-}" yes="${3:-}"
+    need_sup
+    [[ -n "$target" ]] || { say "usage: tctl $action <alerts|api|dashboard|engine|all>"; exit 2; }
+    if [[ "$target" == "all" ]]; then
+        for s in "${SERVICES[@]}"; do "${SUP[@]}" "$action" "$s"; done
+        say "(the engine was not touched: use  tctl $action engine  for that)"
+        return
+    fi
+    valid_service "$target" || { say "unknown program '$target' (alerts, api, dashboard, engine, all)"; exit 2; }
+    if [[ "$target" == "engine" && "$action" != "start" ]]; then
+        if age="$(engine_live)"; then
+            say "The engine is running a live session (heartbeat ${age}s ago)."
+            say "Stopping it ends the session's decisions until it restarts. A restart takes about"
+            say "7 minutes to load history, then rebuilds its state from the journal and durable"
+            say "accounts (D-67); positions are managed on recovery, but nothing is decided meanwhile."
+            [[ "$yes" == "--yes" ]] || { say "Run again with --yes to do it:  tctl $action engine --yes"; exit 1; }
+        fi
+    fi
+    "${SUP[@]}" "$action" "$target"
+}
+
+cmd_logs() {
+    local name="${1:-engine}" n="${2:-60}"
+    local file
+    case "$name" in
+        engine|alerts|api|dashboard) file="$LOGS/$name.log" ;;
+        engine-start|nightly|backup|agent-view|supervisord.out) file="$LOGS/$name.log" ;;
+        supervisor) file="$LOGS/supervisord.out.log" ;;
+        narrative) file="$SHARED/logs/narrative-job.log" ;;
+        audit) file="$SHARED/audit/agent-audit.jsonl" ;;
+        *) say "logs: engine alerts api dashboard engine-start nightly backup agent-view supervisor narrative audit"; exit 2 ;;
+    esac
+    [[ -f "$file" ]] || { say "no log yet: $file"; exit 1; }
+    say "-- $file (last $n lines; add -f as a third word to follow)"
+    if [[ "${3:-}" == "-f" ]]; then tail -n "$n" -f "$file"; else tail -n "$n" "$file" | cut -c1-240; fi
+}
+
+cmd_port_owner_fix() {  # tctl dashboard|api --force: clear an unsupervised process off the port
+    local name="$1" port="$2" l pid
+    l="$(listener "$port")"
+    [[ -n "$l" ]] || return 0
+    pid="${l%% *}"
+    if ! ps -o command= -p "$pid" | grep -q "options-agent"; then
+        say "Port $port is held by something that is not the tournament ($l). Not touching it."
+        exit 1
+    fi
+    sup="$("${SUP[@]}" pid "$name" 2>/dev/null)"
+    [[ "$pid" == "$sup" ]] && return 0
+    say "Port $port is held by an unsupervised tournament process (pid $pid). Stopping it."
+    kill "$pid"; sleep 3
+    kill -0 "$pid" 2>/dev/null && { kill -9 "$pid"; sleep 1; }
+}
+
+cmd_dashboard() {
+    need_sup
+    [[ "${1:-}" == "--force" ]] && cmd_port_owner_fix dashboard "$DASH_PORT"
+    "${SUP[@]}" status dashboard | grep -q RUNNING || "${SUP[@]}" start dashboard
+    sleep 4
+    "${SUP[@]}" status dashboard
+    curl -s -o /dev/null -m 3 "http://127.0.0.1:$DASH_PORT/" && say "dashboard answers on 127.0.0.1:$DASH_PORT" || say "not answering yet: tctl logs dashboard"
+    cmd_tunnel
+}
+
+cmd_tunnel() {
+    bold "From your MacBook, open the tunnel, then browse http://localhost:$DASH_PORT"
+    say "  ssh -N -L $DASH_PORT:127.0.0.1:$DASH_PORT -L $API_PORT:127.0.0.1:$API_PORT mini"
+}
+
+cmd_incidents() {
+    bold "Open incidents"
+    psql -d "$DB" -c "select id, kind, severity, account, left(detail, 70) as detail, to_char(opened_at at time zone 'America/New_York', 'MM-DD HH24:MI') as opened_et from incidents where closed_at is null order by id"
+    bold "Last 10 incidents"
+    psql -d "$DB" -c "select id, kind, severity, to_char(opened_at at time zone 'America/New_York', 'MM-DD HH24:MI') as opened_et, to_char(closed_at at time zone 'America/New_York', 'MM-DD HH24:MI') as closed_et from incidents order by id desc limit 10"
+}
+
+cmd_ledgers() {
+    local day="${1:-$(TZ=America/New_York date +%F)}"
+    bold "Ledgers for $day"
+    python3 - "$REPO" "$day" <<'PY'
+import glob, json, sys
+repo, day = sys.argv[1:3]
+files = sorted(glob.glob(f"{repo}/data/live/{day}/*/ledger/acct_*.json"))
+if not files:
+    print("  none yet (they are written at the close)")
+for f in files:
+    b = json.load(open(f)); s = b["summary"]
+    print(f"  {s['account']:10} trades {s['trades']:2}  net ${s['net_pnl_est_usd']:9.2f}  "
+          f"books {'ok' if b['reconciliation']['ok'] else 'NO'}  unmarked {s['unmarked_positions']}  "
+          f"{s['result_label']}")
+PY
+    psql -d "$DB" -Atc "select 'stored in the database: ' || count(*) || ' account ledger(s) for $day' from ledger_sessions where session_date='$day'"
+}
+
+cmd_session() {
+    bold "Today's session"
+    python3 - "$REPO" <<'PY'
+import json, sys
+try:
+    s = json.load(open(f"{sys.argv[1]}/data/run/engine.state.json"))
+except Exception:
+    print("  no engine state yet"); sys.exit()
+print(f"  {s['session']} {s['mode']}  slot {s['slot']}  state seq {s['seq']}  at {s['at'][:19]}Z")
+print("  feeds:", s["feeds"])
+for b, a in s["accounts"].items():
+    print(f"  {b:10} decisions {a['decisions']:3}  positions {a['positions']}  pending {a['pending_orders']}  "
+          f"halt {a['halted'] or a['operator_halt'] or '-'}")
+PY
+}
+
+cmd_reload_config() {
+    # re-render the Supervisor config from config/app and apply it: no sudo, no Supervisor restart.
+    # Programs whose definition changed are restarted; the engine is only touched if it changed.
+    need_sup
+    if age="$(engine_live)"; then
+        say "The engine is running a live session (heartbeat ${age}s ago). Not reloading now."
+        say "Do it after the close, or force it with:  tctl reload-config --yes   (the engine is only"
+        say "restarted by this if its own definition changed)"
+        [[ "${1:-}" == "--yes" ]] || exit 1
+    fi
+    local stage
+    stage="$(mktemp -d /tmp/tctl-render.XXXXXX)"
+    (cd "$REPO" && uv run tournament ops render --owner "$(id -un)" --home "$HOME" --repo "$REPO" \
+        --uv /opt/homebrew/bin/uv --out "$stage" >/dev/null) || { say "render failed"; rm -rf "$stage"; exit 1; }
+    if cmp -s "$stage/supervisord.conf" "$REPO/data/run/supervisord.conf"; then
+        say "The Supervisor config is already current."
+    else
+        cp "$stage/supervisord.conf" "$REPO/data/run/supervisord.conf"
+        "${SUP[@]}" reread
+        "${SUP[@]}" update
+    fi
+    rm -rf "$stage"
+    say "(launchd times for the engine and nightly jobs are only changed by  sudo ops/host/setup_jobs.sh)"
+}
+
+cmd_test() {
+    bold "Tests and lint"
+    cd "$REPO" && uv run ruff format --check . && uv run ruff check . && uv run pytest -q -p no:warnings
+}
+
+cmd_help() {
+cat <<'TXT'
+tctl: controls for the tournament (run on the mini, as the owner)
+
+  status                  programs, whether the engine is beating, the schedule
+  health                  a checklist: programs, ports, database, incidents, nightly, disk, strays
+  session                 today's engine state: feeds, decisions, positions
+  incidents               open and recent incidents
+  ledgers [YYYY-MM-DD]    the day's ledgers on disk and in the database (default today)
+  logs <name> [n] [-f]    engine alerts api dashboard engine-start nightly backup agent-view
+                          supervisor narrative audit
+  dashboard [--force]     make sure the dashboard runs; --force clears a stray process off its port
+  tunnel                  the ssh command to run on your MacBook to reach the dashboard and API
+
+  start|stop|restart <alerts|api|dashboard|all>
+                          all = alerts, api and dashboard; the engine is never part of "all"
+  restart engine --yes    only with --yes while a session is live (about 7 minutes to recover)
+  stop engine --yes       same; the Supervisor may restart it by itself after a stop
+
+  reload-config           re-render and apply the Supervisor config after a config change (no sudo)
+  test                    format check, lint and the whole test suite
+
+Needs sudo (not done here):  restarting the Supervisor itself:
+  sudo launchctl kickstart -k system/com.options-tournament.supervisor
+  after code or config edits to the jobs:  sudo ~/options-agent/ops/host/setup_jobs.sh
+TXT
+}
+
+case "${1:-help}" in
+    status) cmd_status ;;
+    health) cmd_health ;;
+    session) cmd_session ;;
+    incidents) cmd_incidents ;;
+    ledgers) cmd_ledgers "${2:-}" ;;
+    logs) shift; cmd_logs "$@" ;;
+    dashboard) cmd_dashboard "${2:-}" ;;
+    tunnel) cmd_tunnel ;;
+    start|stop|restart) cmd_service "$1" "${2:-}" "${3:-}" ;;
+    reload-config) cmd_reload_config "${2:-}" ;;
+    test) cmd_test ;;
+    help|-h|--help) cmd_help ;;
+    *) cmd_help; exit 2 ;;
+esac

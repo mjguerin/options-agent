@@ -31,6 +31,10 @@ startsecs=10
 startretries=10
 stopsignal=TERM
 stopwaitsecs=15
+; the program can start children of its own (the dashboard starts Streamlit), and a stop
+; must take them with it or they keep the port and the restart cannot bind
+stopasgroup=true
+killasgroup=true
 redirect_stderr=true
 stdout_logfile=__LOGS__/alerts.log
 stdout_logfile_maxbytes=20MB
@@ -48,6 +52,10 @@ startsecs=10
 startretries=10
 stopsignal=TERM
 stopwaitsecs=15
+; the program can start children of its own (the dashboard starts Streamlit), and a stop
+; must take them with it or they keep the port and the restart cannot bind
+stopasgroup=true
+killasgroup=true
 redirect_stderr=true
 stdout_logfile=__LOGS__/api.log
 stdout_logfile_maxbytes=20MB
@@ -65,6 +73,10 @@ startsecs=10
 startretries=10
 stopsignal=TERM
 stopwaitsecs=15
+; the program can start children of its own (the dashboard starts Streamlit), and a stop
+; must take them with it or they keep the port and the restart cannot bind
+stopasgroup=true
+killasgroup=true
 redirect_stderr=true
 stdout_logfile=__LOGS__/dashboard.log
 stdout_logfile_maxbytes=20MB
