@@ -30,6 +30,7 @@ from tournament.ledger.config import load_ledger_config
 from tournament.live.controls import ControlPlane
 from tournament.live.engine import ShadowEngine
 from tournament.live.ledger_writer import write_session_ledgers
+from tournament.live.load import LoopProbe, write_load
 from tournament.live.options_runner import OptionsCollector
 from tournament.live.recovery import mark_outage_from, previous_runs, replay_journals
 from tournament.live.session import LiveSession
@@ -338,8 +339,10 @@ def run_session(
             handshake_timeout_s=fc["handshake_timeout_s"],
         )
 
+        probe = LoopProbe(fc["load"]["probe_interval_s"])
+
         async def main() -> None:
-            tasks = [stream.run(until)]
+            tasks = [stream.run(until), probe.run(until, stream.clock)]
             if collector is not None:
                 tasks.append(collector.run(until))
             await asyncio.gather(*tasks)
@@ -364,6 +367,12 @@ def run_session(
                             incidents.open(
                                 now_end, "RECONCILIATION_FAILED", str(bad)[:200], binding
                             )
+            load = None
+            try:
+                meters = [stream.meter] + ([collector.stream.meter] if collector else [])
+                load = write_load(out, meters, probe)
+            except Exception:  # noqa: BLE001 - a measuring aid never stops the shutdown
+                log.exception("load tables not written")
             ledgers = None
             if accounts is not None and now_end >= pd.Timestamp(day.close_utc):
                 ledgers = store_ledgers(
@@ -383,6 +392,7 @@ def run_session(
                     "reconciliation": reconciliation,
                     "fresh": fresh,
                     "ledgers": ledgers,
+                    "load": load,
                 },
             )
             if ledgers is not None and "error" not in ledgers:

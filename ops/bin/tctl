@@ -234,6 +234,40 @@ cmd_reload_config() {
     say "(launchd times for the engine and nightly jobs are only changed by  sudo ops/host/setup_jobs.sh)"
 }
 
+cmd_load() {
+    # where the live loop spent its time (written at the close): the worst option-lag seconds,
+    # with how busy the option read loop was and how long the whole event loop was blocked then
+    local day="${1:-$(TZ=America/New_York date +%F)}"
+    bold "Feed load for $day"
+    (cd "$REPO" && uv run python - "$REPO" "$day") <<'PY'
+import glob, sys
+import pandas as pd
+repo, day = sys.argv[1:3]
+dirs = sorted(glob.glob(f"{repo}/data/live/{day}/shadow"))
+if not dirs or not glob.glob(dirs[0] + "/feed_load.parquet"):
+    sys.exit("  no load tables for that day (written at the close, from the 2026-10-29 session on)")
+d = dirs[0]
+f = pd.read_parquet(d + "/feed_load.parquet")
+o = f[f.feed == "option"].set_index("second")
+try:
+    loop = pd.read_parquet(d + "/loop_load.parquet").set_index("second")
+    o = o.join(loop[["loop_lag_max_ms"]], how="left")
+except Exception:
+    o["loop_lag_max_ms"] = None
+print(f"  option frames {int(o.frames.sum())}, quotes {int(o.msgs.sum())}, "
+      f"busiest second {int(o.msgs.max())} quotes in {int(o.frames.max())} frames")
+print(f"  read loop busy {o.busy_s.sum() / max(len(o), 1) * 100:.1f}% of the time; "
+      f"worst single frame {o.max_frame_ms.max():.1f} ms")
+if "loop_lag_max_ms" in o:
+    print(f"  event loop blocked over 250 ms in {int((o.loop_lag_max_ms > 250).sum())} seconds; "
+          f"worst {o.loop_lag_max_ms.max():.0f} ms")
+worst = o.sort_values("max_lag_s", ascending=False).head(8)
+worst.index = pd.to_datetime(worst.index, unit="s", utc=True).tz_convert("America/New_York").strftime("%H:%M:%S")
+print("  worst seconds by quote lag:")
+print(worst[["max_lag_s", "frames", "msgs", "bytes", "busy_s", "wait_s", "max_frame_ms", "loop_lag_max_ms"]].round(3).to_string())
+PY
+}
+
 cmd_test() {
     bold "Tests and lint"
     cd "$REPO" && uv run ruff format --check . && uv run ruff check . && uv run pytest -q -p no:warnings
@@ -258,6 +292,8 @@ tctl: controls for the tournament (run on the mini, as the owner)
   restart engine --yes    only with --yes while a session is live (about 7 minutes to recover)
   stop engine --yes       same; the Supervisor may restart it by itself after a stop
 
+  load [YYYY-MM-DD]       where the live loop spent its time: the worst quote-lag seconds with
+                          how busy the read loop was and how long the event loop was blocked
   reload-config           re-render and apply the Supervisor config after a config change (no sudo)
   test                    format check, lint and the whole test suite
 
@@ -278,6 +314,7 @@ case "${1:-help}" in
     tunnel) cmd_tunnel ;;
     start|stop|restart) cmd_service "$1" "${2:-}" "${3:-}" ;;
     reload-config) cmd_reload_config "${2:-}" ;;
+    load) cmd_load "${2:-}" ;;
     test) cmd_test ;;
     help|-h|--help) cmd_help ;;
     *) cmd_help; exit 2 ;;

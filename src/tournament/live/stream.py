@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -26,6 +27,7 @@ import pandas as pd
 import websockets
 
 from tournament.appconfig import app_config
+from tournament.live.load import LoadMeter
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +63,7 @@ def now_utc() -> pd.Timestamp:
 
 class MarketDataStream:
     content_type: str | None = None
+    meter_name = "stream"
 
     def __init__(
         self,
@@ -85,6 +88,7 @@ class MarketDataStream:
         self.tick_s, self.backoff_s, self.clock = tick_s, backoff_s, clock
         self.ping_interval_s, self.handshake_timeout_s = ping_interval_s, handshake_timeout_s
         self.connects = 0
+        self.meter = LoadMeter(self.meter_name)
         self.errors: list[tuple[pd.Timestamp, int | None, str]] = []
 
     # ---- wire format: overridden per feed ----------------------------------------------
@@ -102,6 +106,10 @@ class MarketDataStream:
 
     def on_subscription(self, msg: dict) -> None:
         """The server's confirmation of the current subscription."""
+
+    def message_lag_s(self, msgs: list[dict], received: pd.Timestamp) -> float | None:
+        """How late the newest data message in a frame was, if the feed can say cheaply."""
+        return None
 
     # ---- connection -------------------------------------------------------------------
     async def run(self, until: pd.Timestamp) -> None:
@@ -164,11 +172,15 @@ class MarketDataStream:
                 self.on_tick(now)
                 last_tick = now
             await self.sync(ws)
+            waiting_since = time.perf_counter()
             try:
                 raw = await asyncio.wait_for(ws.recv(), timeout=self.tick_s)
             except TimeoutError:
+                self.meter.waited(self.clock(), time.perf_counter() - waiting_since)
                 continue
             received = self.clock()
+            started = time.perf_counter()
+            self.meter.waited(received, started - waiting_since)
             msgs = self.decode(raw)
             if self.on_frame:
                 self.on_frame(msgs, received)
@@ -184,9 +196,15 @@ class MarketDataStream:
                     data.append(m)
             if data:
                 self.on_messages(data, received)
+            self.meter.frame(
+                received, len(raw), len(msgs), time.perf_counter() - started,
+                self.message_lag_s(msgs, received),
+            )  # fmt: skip
 
 
 class AlpacaStockStream(MarketDataStream):
+    meter_name = "stock"
+
     def __init__(self, feed: str, key_id: str, secret: str, symbols: list[str], *, mode: str, **kw):
         check_feed(feed, mode)
         super().__init__(stock_url(feed), key_id, secret, **kw)

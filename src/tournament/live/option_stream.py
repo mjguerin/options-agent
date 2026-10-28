@@ -46,6 +46,7 @@ def check_option_feed(feed: str, mode: str) -> None:
 
 class AlpacaOptionStream(MarketDataStream):
     content_type = "application/msgpack"
+    meter_name = "option"
 
     def __init__(
         self,
@@ -69,6 +70,12 @@ class AlpacaOptionStream(MarketDataStream):
 
     def decode(self, raw: bytes | str) -> list[dict]:
         return msgpack.unpackb(raw, timestamp=2)  # MessagePack timestamps as integer ns
+
+    def message_lag_s(self, msgs: list[dict], received) -> float | None:
+        for m in reversed(msgs):
+            if m.get("T") == "q" and isinstance(m.get("t"), int):
+                return (received.value - m["t"]) / 1e9
+        return None
 
     def set_symbols(self, symbols: set[str] | frozenset[str]) -> None:
         """The full set of contracts to hold quotes for. Capped here as a last line of defence;
