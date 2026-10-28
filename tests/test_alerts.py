@@ -472,3 +472,40 @@ def test_the_telegram_variables_are_loaded_from_env_with_the_mode_check(tmp_path
     env.write_text("TELEGRAM_BOT_TOKEN=\n")
     with pytest.raises(MissingCredentialsError):
         load_telegram_credentials(env)
+
+
+# ---- the "engine ready" message: a positive sign, once per start -------------------------------
+
+
+def ready_messages(store):
+    return [o.text for o in store.due(at(1000), 50) if o.text.startswith("Engine ready")]
+
+
+def test_one_ready_message_when_the_stock_feed_is_up_and_no_more_on_later_ticks(tmp_path):
+    accounts = SimpleNamespace(router=SimpleNamespace(runtimes={f"a{i}": None for i in range(5)}))
+    m, store, _ = monitor(tmp_path, accounts=accounts)
+    m._accounts = lambda now: None  # the account checks have their own tests
+    m.tick(at(0))
+    m.tick(at(5))
+    m.tick(at(10))
+    (msg,) = ready_messages(store)
+    assert "5 accounts" in msg and "feeds connected at" in msg and "ET" in msg
+
+
+def test_ready_waits_for_both_feeds_and_can_be_switched_off(tmp_path):
+    option = SimpleNamespace(
+        error=None, feed=SimpleNamespace(health=FeedHealth(pd.Timedelta(seconds=5)))
+    )
+    m, store, _ = monitor(tmp_path, collector=option)
+    m.tick(at(0))
+    assert ready_messages(store) == []  # the option feed has not connected
+    option.feed.health.on_connected(at(1))
+    m.tick(at(2))
+    assert len(ready_messages(store)) == 1
+    off = CFG.model_copy(
+        update={"delivery": CFG.delivery.model_copy(update={"engine_ready": False})}
+    )
+    m2, store2, _ = monitor(tmp_path)
+    m2.cfg = off
+    m2.tick(at(0))
+    assert ready_messages(store2) == []

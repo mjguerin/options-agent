@@ -16,6 +16,7 @@ import pandas as pd
 
 from tournament.alerts.config import AlertsConfig
 from tournament.alerts.incidents import Incidents
+from tournament.appconfig import app_config
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class SessionMonitor:
         self._down_since: dict[str, pd.Timestamp | None] = {"stock": None, "option": None}
         self._seen_errors = 0
         self._seen_quarantined = 0
+        self._ready_sent = False
         flat = pd.Timedelta(minutes=cfg.monitor.flat_deadline_min_before_close)
         self.flat_deadline = pd.Timestamp(session.day.close_utc) - flat
 
@@ -54,6 +56,7 @@ class SessionMonitor:
         self._engine(now)
         self._accounts(now)
         self._conditions(now)
+        self._ready(now)
 
     # ---- the heartbeat the bot's watchdog reads ----------------------------------------------
     def _heartbeat(self, now: pd.Timestamp) -> None:
@@ -162,6 +165,24 @@ class SessionMonitor:
             self.inc.notify(
                 now, "UNKNOWN_CONDITION", f"{n} trade(s) quarantined, {total} so far today"
             )
+
+    def _ready(self, now) -> None:
+        """One positive message per start: silence from the bot is otherwise ambiguous."""
+        if self._ready_sent or not self.cfg.delivery.engine_ready:
+            return
+        if not self.session.health.connected:
+            return
+        if self.collector is not None and not self.collector.feed.health.connected:
+            return
+        self._ready_sent = True
+        n = len(self.accounts.router.runtimes) if self.accounts is not None else 0
+        at = now.tz_convert(app_config().exchange.tz).strftime("%H:%M")
+        self.inc.notify(
+            now,
+            "ENGINE_READY",
+            f"{self.session.day.session_date} {self.mode}: {n} accounts, stock and option "
+            f"feeds connected at {at} ET",
+        )
 
     # ---- end of session ------------------------------------------------------------------------
     def finish(self, now: pd.Timestamp) -> None:

@@ -18,6 +18,7 @@ delivery:
   min_severity: info                 # info | warning | critical: nothing below is sent
   repeat_open_critical_s: 900        # a critical incident that stays open is repeated this often
   session_summary: true              # a short message after each session
+  engine_ready: true                 # one message when the engine is up and both feeds are connected
 
 monitor:                             # the engine-side checks, run once a second
   feed_down_grace_s: 10              # a feed must stay down this long before it is an incident
@@ -131,6 +132,10 @@ kinds:
     severity: critical
     open: "{account} has orders of unknown state ({detail}). Nothing is resent until they are settled."
     resolved: "{account} orders are settled."
+  ENGINE_READY:
+    severity: info
+    open: "Engine ready: {detail}"
+    resolved: ""
   SESSION_SUMMARY:
     severity: info
     open: "{detail}"

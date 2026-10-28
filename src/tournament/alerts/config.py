@@ -40,6 +40,7 @@ class Delivery(_S):
     min_severity: Severity
     repeat_open_critical_s: float = Field(gt=0)
     session_summary: bool
+    engine_ready: bool
 
     @model_validator(mode="after")
     def _every_severity(self):
