@@ -117,13 +117,17 @@ class SessionMonitor:
         self._seen_errors = len(a.errors)
         for binding, rt in a.router.runtimes.items():
             if rt.halted == "DAILY_LIMIT":
-                loss = rt.guard.update(now, rt.realized_pnl(), []).loss
+                loss = rt.guard.breach_loss
+                if loss is None:  # halted without a recorded trip (a restart): the realized part
+                    loss = rt.guard.update(now, rt.realized_pnl(), []).loss
                 self.inc.open(
                     now,
                     "DAILY_LIMIT_HALT",
                     f"${loss:,.0f} of ${rt.risk.daily_loss.limit_usd:,.0f}",
                     binding,
                 )
+            else:  # a new session starts with the brake off: the last one's incident is over
+                self.inc.resolve(now, "DAILY_LIMIT_HALT", binding)
             if rt.orders.entries_blocked:
                 self.inc.open(now, "ENTRIES_BLOCKED", rt.orders.entries_blocked, binding)
             else:

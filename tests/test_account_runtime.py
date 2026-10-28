@@ -336,6 +336,9 @@ def test_the_daily_loss_limit_halts_entries_but_keeps_managing_the_position():
     prices(m, at(10), call=(1.05, 1.06))  # open loss (1.05-1.44)*1300 = -$507
     rt.on_tick(at(10))
     assert rt.halted == "DAILY_LIMIT" and rt.guard.breached_at is not None
+    assert rt.guard.breach_loss == pytest.approx(
+        507.0
+    )  # the measure that tripped it, open part too
     d = rt.on_candidate(at(10), cand("c2", expires_at=at(100)))
     assert not d.accepted and d.reasons == ("DAILY_LIMIT",)
     assert [r for _, _, r in rt.exits_requested] == ["PREMIUM_STOP"]  # still managed

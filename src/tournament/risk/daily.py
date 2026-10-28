@@ -41,6 +41,9 @@ class DailyLossGuard:
 
     def reset_session(self) -> None:
         self.breached_at: pd.Timestamp | None = None
+        self.breach_loss: float | None = (
+            None  # the loss, by the configured measure, when it tripped
+        )
 
     def risk_view(self, realized_pnl: float, positions: list[OpenPosition]) -> dict:
         """Three numbers kept apart, none of which touches the accounting: realized profit and
@@ -78,6 +81,7 @@ class DailyLossGuard:
         loss = -(realized_pnl + open_pnl)
         if self.breached_at is None and loss >= self.cfg.limit_usd - 1e-9:
             self.breached_at = now
+            self.breach_loss = loss
         breached = self.breached_at is not None
         return LossStatus(
             loss,

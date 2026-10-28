@@ -395,7 +395,7 @@ def test_accounts_report_limit_halts_blocks_errors_and_residual_exposure(tmp_pat
     def rt(halted=None, blocked=None, held=None):
         return SimpleNamespace(
             halted=halted,
-            guard=SimpleNamespace(update=lambda *a: SimpleNamespace(loss=510.0)),
+            guard=SimpleNamespace(update=lambda *a: SimpleNamespace(loss=100.0), breach_loss=510.0),
             realized_pnl=lambda: -100.0,
             risk=SimpleNamespace(daily_loss=SimpleNamespace(limit_usd=500)),
             orders=SimpleNamespace(
@@ -421,6 +421,11 @@ def test_accounts_report_limit_halts_blocks_errors_and_residual_exposure(tmp_pat
     m.tick(at(0))
     kinds = sorted((i.kind, i.account) for i in store.open_incidents())
     assert ("DAILY_LIMIT_HALT", "acct:vpc") in kinds and ("ENTRIES_BLOCKED", "acct:orb") in kinds
+    (halt,) = [i for i in store.open_incidents() if i.kind == "DAILY_LIMIT_HALT"]
+    assert halt.detail == "$510 of $500"  # what tripped it, not the realized part alone
+    accounts.router.runtimes["acct:vpc"].halted = None  # the next session: the brake is off again
+    m.tick(at(5))
+    assert not any(i.kind == "DAILY_LIMIT_HALT" for i in store.open_incidents())
     assert not any(k == "RESIDUAL_EXPOSURE" for k, _ in kinds)  # not yet past the flat deadline
     m.tick(m.flat_deadline + pd.Timedelta(seconds=2))
     assert ("RESIDUAL_EXPOSURE", "acct:brt") in sorted(
