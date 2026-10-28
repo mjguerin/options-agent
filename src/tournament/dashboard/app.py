@@ -261,6 +261,42 @@ def page_research(b, status: dict) -> None:
             "broker). Evaluation columns price the same executions against the quote held at "
             "each decision, the same way for every account."
         )
+    paths = data.read_json(
+        next(
+            iter(
+                sorted(b.live_root.glob(f"{mine['summary']['session_date']}/*/ledger/paths.json"))
+            ),
+            b.live_root,
+        )
+    )
+    rows = (paths or {}).get(acct) or []
+    if rows:
+        st.write("**Where each trade went**")
+        view = []
+        for r in rows:
+            o, ref = r.get("option") or {}, r.get("reference") or {}
+            hold = o.get("hold") or {}
+            view.append(
+                {
+                    "symbol": r["symbol"],
+                    "entry": r["entry"],
+                    "exit": r["exit"],
+                    "best bid in hold": hold.get("peak_bid"),
+                    "worst bid in hold": hold.get("low_bid"),
+                    "best bid after exit": (o.get("after_exit") or {}).get("peak_bid"),
+                    "last bid of day": (o.get("session_end") or {}).get("last_bid"),
+                    "exit vs holding to the end $": o.get("exit_vs_held_to_end_usd"),
+                    "signal result R": ref.get("result_r"),
+                    "signal best R": ref.get("best_excursion_r"),
+                    "signal exit": ref.get("exit_reason"),
+                }
+            )
+        st.dataframe(pd.DataFrame(view), hide_index=True, use_container_width=True)
+        st.caption(
+            "A signal that never moved in favour (best R near zero) failed on its own terms. "
+            "A signal that ran for the trade and was then given back points at the exit. One "
+            "trade is an anecdote."
+        )
     st.write(
         "**Reconciliation**", {k: v["ok"] for k, v in mine["reconciliation"]["checks"].items()}
     )

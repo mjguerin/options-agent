@@ -115,6 +115,10 @@ kinds:
     severity: warning
     open: "The session ledger could not be stored: {detail}. The JSON files in the session folder are the record."
     resolved: "Ledger storage is working."
+  LEDGER_PATHS_FAILED:
+    severity: warning
+    open: "The per-trade review of where price went could not be written: {detail}. The ledgers and results are unaffected."
+    resolved: "The per-trade review is being written."
   RECONCILIATION_FAILED:
     severity: critical
     open: "{account} did not reconcile after the close: {detail}"

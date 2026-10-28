@@ -91,6 +91,10 @@ class Report(_S):
     profit_factor_when_no_losses: Literal["undefined", "infinity"]
 
 
+class Paths(_S):
+    after_exit_window_min: float = Field(gt=0)  # how long after an exit the review keeps watching
+
+
 class Gates(_S):
     """Every gate is mandatory. A gate whose threshold is unset is NOT_EVALUABLE and blocks
     qualification: leaving a value out never removes a requirement."""
@@ -113,6 +117,7 @@ class LedgerConfig(_S):
     reconciliation: Reconciliation
     snapshots: Snapshots
     report: Report
+    paths: Paths
     promotion_gates: Gates
 
     @model_validator(mode="after")

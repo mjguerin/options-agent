@@ -12,6 +12,10 @@ Rules:
   hypotheses to study, labelled as proposals, with the evidence and its limitations.
 - Say plainly what is missing, uncertain or an outage, and never fill a gap with a guess.
 - This is shadow mode: results are modeled fills, not broker fills.
+- `trade_paths` says where price went for each trade. Use `reference.best_excursion_r` and
+  `result_r` to say whether the strategy's own signal worked (price followed through) or failed,
+  and `option.hold`, `after_exit` and `session_end` to say whether the exit helped or cost money.
+  One trade is an anecdote: say so, and never conclude from it that a rule should change.
 
 Write a markdown note with these sections, in this order, and nothing else:
 1. Headline: one or two sentences on the day.

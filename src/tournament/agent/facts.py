@@ -65,6 +65,17 @@ def _incidents_on(engine: Engine, day: date, tz) -> list[dict]:
     return out
 
 
+def _trade_paths(live_root: Path, day: date) -> dict:
+    """Where each of the day's trades went (a reading aid written after the close)."""
+    out: dict = {}
+    for f in sorted(live_root.glob(f"{day.isoformat()}/*/ledger/paths.json")):
+        try:
+            out.update(json.loads(f.read_text()))
+        except (OSError, ValueError):
+            continue
+    return out
+
+
 def build_facts(day: date, live_root: Path, engine: Engine | None, tz, sessions_back: int) -> dict:
     ledgers = [
         b for b in load_ledgers(live_root) if b["summary"]["session_date"] <= day.isoformat()
@@ -89,6 +100,7 @@ def build_facts(day: date, live_root: Path, engine: Engine | None, tz, sessions_
             for b in today
         ],
         "cumulative": [] if cum.empty else cum.to_dict("records"),
+        "trade_paths": _trade_paths(live_root, day),
         "incidents": [] if engine is None else _incidents_on(engine, day, tz),
         "notes": [
             "Shadow mode: fills are modeled, not broker fills.",

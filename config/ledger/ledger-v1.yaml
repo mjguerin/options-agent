@@ -54,6 +54,9 @@ report:
   annualization: none                # no annualized figures until a policy is approved
   profit_factor_when_no_losses: undefined   # undefined | infinity
 
+paths:                               # the per-trade review of where price went (reading aid only)
+  after_exit_window_min: 30          # how long after an exit the option is still watched
+
 promotion_gates:                     # every gate is mandatory; null = not set = NOT_EVALUABLE (D-83)
   min_net_pnl_usd: 0.0               # strictly positive after approved costs
   max_unresolved_accounting_incidents: 0

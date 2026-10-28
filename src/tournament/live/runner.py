@@ -385,6 +385,8 @@ def run_session(
                     "ledgers": ledgers,
                 },
             )
+            if ledgers is not None and "error" not in ledgers:
+                store_trade_paths(out, pd.Timestamp.now(tz="UTC"), incidents)
             if monitor is not None:
                 monitor.tick(pd.Timestamp.now(tz="UTC"))
                 monitor.finish(pd.Timestamp.now(tz="UTC"))
@@ -433,6 +435,21 @@ def store_ledgers(accounts, session, now, manifest, mode, out, incidents, live_r
         }
     except Exception as exc:  # noqa: BLE001
         log.exception("ledgers not written")
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+def store_trade_paths(out: Path, now, incidents) -> dict | None:
+    """After the session's files are saved: where each trade went. A reading aid, so a failure is
+    reported and nothing else depends on it."""
+    try:
+        from tournament.ledger.paths import build_paths
+
+        paths = build_paths(out, load_ledger_config())
+        return {"trades": sum(len(v) for v in paths.values())}
+    except Exception as exc:  # noqa: BLE001
+        log.exception("trade paths not written")
+        if incidents is not None:
+            incidents.open(now, "LEDGER_PATHS_FAILED", f"{type(exc).__name__}: {exc}"[:160])
         return {"error": f"{type(exc).__name__}: {exc}"}
 
 
