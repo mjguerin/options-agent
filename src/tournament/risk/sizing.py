@@ -16,6 +16,7 @@ from tournament.risk.config import RiskConfig
 
 PREMIUM_EXCEEDS_BUDGET, BELOW_MIN_QUANTITY = "PREMIUM_EXCEEDS_BUDGET", "BELOW_MIN_QUANTITY"
 QUOTE_SIZE_SHORTFALL = "QUOTE_SIZE_SHORTFALL"
+DAILY_HEADROOM = "DAILY_HEADROOM"  # not even one contract fits under what is left of the limit
 
 
 @dataclass(frozen=True)
@@ -39,8 +40,16 @@ def equity_basis(cfg: RiskConfig, start_of_day_equity: float, initial_equity: fl
 
 
 def size_order(
-    ask: float, ask_size: int, basis_equity: float, available_cash: float, cfg: RiskConfig
+    ask: float,
+    ask_size: int,
+    basis_equity: float,
+    available_cash: float,
+    cfg: RiskConfig,
+    loss_headroom: float | None = None,
 ) -> SizeResult:
+    """Contracts to buy: the most the premium budget allows, then held to cash, the quoted size
+    and, when `loss_headroom` is given (D-92), to what keeps a stopped-out trade under the daily
+    limit: contracts x premium x (stop loss + the assumed extra) <= headroom."""
     s = cfg.sizing
     budget = Decimal(str(s.premium_budget_pct)) * Decimal(str(basis_equity))
     cost = Decimal(str(ask)) * s.contract_multiplier
@@ -71,6 +80,20 @@ def size_order(
         if s.on_quote_size_shortfall == "reject":
             return result(0, (QUOTE_SIZE_SHORTFALL,))
         qty, capped = ask_size, "ask_size"
+    if loss_headroom is not None:
+        d = cfg.daily_loss
+        per_contract = cost * (
+            Decimal(str(cfg.premium_stop.loss_pct)) + Decimal(str(d.assumed_extra_loss_pct))
+        )
+        by_room = int(
+            (max(Decimal(str(loss_headroom)), Decimal(0)) / per_contract).to_integral_value(
+                rounding=ROUND_FLOOR
+            )
+        )
+        if by_room < qty:
+            if by_room < s.min_quantity:
+                return result(0, (DAILY_HEADROOM,))
+            qty, capped = by_room, "daily_headroom"
     if qty < s.min_quantity:
         return result(0, (BELOW_MIN_QUANTITY,))
     return result(qty, ())

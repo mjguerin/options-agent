@@ -281,3 +281,47 @@ def test_premium_stop_fires_at_the_configured_loss():
 def test_the_quote_message_helper_used_by_the_fixtures_matches_the_feed():
     m = {"T": "q", "S": occ(765), "t": T0.isoformat(), "bp": 1.0, "ap": 1.1, "bs": 1, "as": 1}
     assert quote_from(m, T0).mid == pytest.approx(1.05)
+
+
+# ---- sizing to the daily-limit headroom (D-92) -------------------------------------------------
+
+
+def test_headroom_caps_the_quantity_so_a_stopped_out_trade_stays_under_the_limit():
+    free = size_order(1.44, 30, 10_000, 10_000, CFG)
+    assert free.quantity == 13 and free.capped_by is None
+    r = size_order(1.44, 30, 10_000, 10_000, CFG, loss_headroom=221.0)
+    assert r.quantity == 6 and r.capped_by == "daily_headroom" and r.requested_quantity == 13
+    stop_and_extra = CFG.premium_stop.loss_pct + CFG.daily_loss.assumed_extra_loss_pct
+    assert r.premium_per_contract * r.quantity * stop_and_extra <= 221.0
+    assert r.premium_per_contract * (r.quantity + 1) * stop_and_extra > 221.0  # the most that fits
+
+
+def test_no_room_for_one_contract_is_refused_as_daily_headroom_not_as_a_small_order():
+    r = size_order(1.44, 30, 10_000, 10_000, CFG, loss_headroom=30.0)
+    assert r.quantity == 0 and r.reasons == ("DAILY_HEADROOM",)
+    assert size_order(1.44, 30, 10_000, 10_000, CFG, loss_headroom=-5.0).reasons == (
+        "DAILY_HEADROOM",
+    )
+
+
+def test_ample_headroom_or_none_leaves_the_size_alone():
+    assert size_order(1.44, 30, 10_000, 10_000, CFG, loss_headroom=5_000.0).quantity == 13
+    assert size_order(1.44, 30, 10_000, 10_000, CFG, loss_headroom=None).quantity == 13
+
+
+def test_the_other_caps_still_win_when_they_are_tighter():
+    r = size_order(1.44, 4, 10_000, 10_000, CFG, loss_headroom=221.0)  # only 4 quoted
+    assert r.quantity == 4 and r.capped_by == "ask_size"
+
+
+def test_the_guard_reads_headroom_without_changing_anything():
+    from tournament.risk.daily import DailyLossGuard, OpenPosition
+
+    g = DailyLossGuard(CFG.daily_loss, 100)
+    assert g.headroom(-279.0, []) == pytest.approx(221.0)
+    assert g.headroom(150.0, []) == pytest.approx(650.0)  # a gain adds room
+    held = [OpenPosition("X", 5, 1.00, 0.80)]  # open at the bid: -$100 more
+    assert g.headroom(-279.0, held) == pytest.approx(121.0)
+    assert g.breached_at is None and g.breach_loss is None  # asking never trips the limit
+    unmarked = [OpenPosition("X", 5, 1.00, None)]  # no bid: counted as the whole premium lost
+    assert g.headroom(0.0, unmarked) == pytest.approx(0.0)

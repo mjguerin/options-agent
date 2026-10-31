@@ -30,6 +30,10 @@ daily_loss:                          # RK-01, D07
   measure: realized_plus_open_at_bid # realized_only | realized_plus_open_at_bid
   on_breach: halt_entries            # halt_entries | halt_and_flatten (RK-02)
   unmarked_position: full_loss       # full_loss | entry_cost: an open position with no usable bid
+  size_to_headroom: true             # D-92: an entry is sized so that, if it is stopped out, the
+                                     # day's loss still stays under limit_usd
+  assumed_extra_loss_pct: 0.05       # premium points assumed lost beyond the stop (0.20 + 0.05 =
+                                     # 25%); the worst of 9 shadow stop-outs lost 21.1% of premium
 
 contract_selection:                  # CS-01 to CS-03, CS-07; D06 (initial rule)
   expiry_days: 0                     # 0 = same-day (0DTE)

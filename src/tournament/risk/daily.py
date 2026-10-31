@@ -66,9 +66,9 @@ class DailyLossGuard:
             "unmarked_positions": unmarked,
         }
 
-    def update(
-        self, now: pd.Timestamp, realized_pnl: float, positions: list[OpenPosition]
-    ) -> LossStatus:
+    def _loss(self, realized_pnl: float, positions: list[OpenPosition]) -> tuple[float, int]:
+        """The day's loss by the configured measure (positive = money lost), and how many open
+        positions had no usable bid. Reads only."""
         open_pnl, unmarked = 0.0, 0
         if self.cfg.measure == "realized_plus_open_at_bid":
             for p in positions:
@@ -78,7 +78,18 @@ class DailyLossGuard:
                         open_pnl -= p.entry_price * p.quantity * self.multiplier
                 else:
                     open_pnl += (p.bid - p.entry_price) * p.quantity * self.multiplier
-        loss = -(realized_pnl + open_pnl)
+        return -(realized_pnl + open_pnl), unmarked
+
+    def headroom(self, realized_pnl: float, positions: list[OpenPosition]) -> float:
+        """How much more the day can lose before the limit trips. Changes nothing; a gain today
+        adds room, a loss uses it (D-92)."""
+        loss, _ = self._loss(realized_pnl, positions)
+        return self.cfg.limit_usd - loss
+
+    def update(
+        self, now: pd.Timestamp, realized_pnl: float, positions: list[OpenPosition]
+    ) -> LossStatus:
+        loss, unmarked = self._loss(realized_pnl, positions)
         if self.breached_at is None and loss >= self.cfg.limit_usd - 1e-9:
             self.breached_at = now
             self.breach_loss = loss

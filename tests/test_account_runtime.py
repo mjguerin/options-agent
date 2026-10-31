@@ -346,7 +346,7 @@ def test_the_daily_loss_limit_halts_entries_but_keeps_managing_the_position():
 
 def test_flatten_on_breach_is_a_config_choice(tmp_path):
     raw = yaml.safe_load(DEFAULT_PATH.read_text())
-    raw["daily_loss"].update(on_breach="halt_and_flatten", limit_usd=100)
+    raw["daily_loss"].update(on_breach="halt_and_flatten", limit_usd=100, size_to_headroom=False)
     raw["premium_stop"].update(loss_pct=0.9)  # so only the daily limit can fire here
     p = tmp_path / "r.yaml"
     p.write_text(yaml.safe_dump(raw))
@@ -386,3 +386,50 @@ def test_the_budget_is_a_config_value(tmp_path):
     p.write_text(yaml.safe_dump(raw))
     rt, _, m = build(risk=load_risk_config(p))
     assert take(rt, m).size.quantity == 6
+
+
+# ---- sizing to the room left under the daily limit (D-92) --------------------------------------
+
+
+def test_a_second_entry_is_cut_to_what_the_remaining_room_can_absorb():
+    rt, sim, m = build()
+    prices(m, at(0))
+    # 13 contracts at 1.44 would risk 13 x 144 x 25% = $468 of an untouched $500 limit: they fit
+    d = rt.on_candidate(at(0), cand())
+    assert d.accepted and d.size.quantity == 13 and d.size.capped_by is None
+    # after a $279 loss only $221 is left, which absorbs 6 contracts, not 13
+    rt2, sim2, m2 = build()
+    rt2.realized_pnl = lambda: -279.0
+    prices(m2, at(0))
+    d2 = rt2.on_candidate(at(0), cand("c2"))
+    assert d2.accepted and d2.size.quantity == 6
+    assert (d2.size.requested_quantity, d2.size.capped_by) == (13, "daily_headroom")
+    assert d2.size.premium_per_contract * d2.size.quantity * 0.25 <= 221.0
+
+
+def test_with_no_room_for_even_one_contract_the_signal_is_refused_with_a_reason():
+    rt, sim, m = build()
+    rt.realized_pnl = lambda: -470.0  # $30 left; one contract needs 144 x 25% = $36
+    prices(m, at(0))
+    d = rt.on_candidate(at(0), cand())
+    assert not d.accepted and d.reasons == ("DAILY_HEADROOM",)
+    assert rt.halted is None  # the limit itself has not tripped; there is just no room for a trade
+
+
+def test_a_profitable_day_adds_room_and_the_budget_still_caps_the_trade():
+    rt, sim, m = build()
+    rt.realized_pnl = lambda: 400.0
+    prices(m, at(0))
+    d = rt.on_candidate(at(0), cand())
+    assert d.accepted and d.size.quantity == 13  # the 20% premium budget still binds
+
+
+def test_the_rule_can_be_switched_off_in_the_config(tmp_path):
+    raw = yaml.safe_load(DEFAULT_PATH.read_text())
+    raw["daily_loss"]["size_to_headroom"] = False
+    p = tmp_path / "r.yaml"
+    p.write_text(yaml.safe_dump(raw))
+    rt, sim, m = build(risk=load_risk_config(p))
+    rt.realized_pnl = lambda: -470.0
+    prices(m, at(0))
+    assert rt.on_candidate(at(0), cand()).accepted  # as before: sized to the budget alone

@@ -170,7 +170,7 @@ function signalTable(signals, multi) {
     const tag = s.status === 'EXECUTED' ? '<span class="tag exec">EXECUTED</span>'
       : s.status === 'ACCEPTED_UNFILLED' ? '<span class="tag unf">NOT FILLED</span>' : '<span class="tag rej">NOT TRADED</span>';
     const why = s.reasons && s.reasons.length ? `<span class="mute"> ${esc(s.reasons.map(nice).join(', '))}</span>` : '';
-    const q = s.qty != null ? s.qty + (s.requested_qty && s.requested_qty !== s.qty ? ` <span class="mute">of ${s.requested_qty}</span>` : '') : '–';
+    const q = s.qty != null ? s.qty + (s.requested_qty && s.requested_qty !== s.qty ? ` <span class="mute">of ${s.requested_qty}${s.capped_by ? ' (' + nice(s.capped_by) + ')' : ''}</span>` : '') : '–';
     const r = s.ref;
     return `<tr><td>${esc(s.day)}</td><td>${timeET(s.at)}</td><td>${arrow(s.direction)}</td>
       <td class="wrap">${tag}${why}</td><td>${esc(s.contract || '–')}</td><td>${q}</td><td>${px(s.entry_reference)}</td>

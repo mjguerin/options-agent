@@ -133,7 +133,10 @@ class AccountRuntime:
 
         basis = equity_basis(self.risk, self.start_of_day_equity, self.initial_equity)
         q = sel.quote
-        size = size_order(q.ask, q.ask_size, basis, self.account.cash(), self.risk)
+        room = None
+        if self.risk.daily_loss.size_to_headroom:
+            room = self.guard.headroom(self.realized_pnl(), self._open_positions(now))
+        size = size_order(q.ask, q.ask_size, basis, self.account.cash(), self.risk, room)
         if not size.sized:
             return self._reject(cid, *size.reasons, selection=sel, size=size)
 
