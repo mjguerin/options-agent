@@ -56,6 +56,13 @@ report:
 
 paths:                               # the per-trade review of where price went (reading aid only)
   after_exit_window_min: 30          # how long after an exit the option is still watched
+  exit_rules:                        # counterfactuals, declared in access log #25; nothing trades on them
+    fill_delay_s: 1                  # a rule that fires fills at the bid this long afterwards
+    breakeven_after_pct: [0.05, 0.10, 0.15]   # option: stop at entry once the bid is this far above
+    half_at_pct: [0.10, 0.20]        # option: sell half at this gain, the rest exits as executed
+    trail_activate_pct: 0.10         # option: trailing stop starts at this gain ...
+    trail_give_back_pct: 0.10        # ... and sells when the bid is this far below the peak
+    r_tiers: [0.5, 1.0]              # SPY, in R: sell half at this close; also with the rest stopped at entry
 
 promotion_gates:                     # every gate is mandatory; null = not set = NOT_EVALUABLE (D-83)
   min_net_pnl_usd: 0.0               # strictly positive after approved costs

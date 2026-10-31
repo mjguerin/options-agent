@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from tournament.ledger.config import ExitRules, load_ledger_config
+from tournament.ledger.exit_rules import option_rule_names, r_rule_names, r_rules
 from tournament.ledger.paths import reference_path
 from tournament.report.config import REPO_ROOT, ReportConfig
 
@@ -101,7 +103,7 @@ def _funnel(transitions: pd.DataFrame, candidates: pd.DataFrame) -> dict[str, di
     return out
 
 
-def collect_day(day: str, run: Path, live_root: Path) -> dict:
+def collect_day(day: str, run: Path, live_root: Path, rules: ExitRules) -> dict:
     ledgers = {}
     for f in sorted((run / "ledger").glob("acct_*.json")):
         body = read_json(f)
@@ -120,6 +122,7 @@ def collect_day(day: str, run: Path, live_root: Path) -> dict:
     if not refs.empty and not bars.empty:
         for _, r in refs.iterrows():
             ref_by_cid[r["candidate_id"]] = reference_path(r, bars)
+            ref_by_cid[r["candidate_id"]]["rules_r"] = r_rules(r, bars, rules)
 
     accounts: dict[str, dict] = {}
     for acct, body in ledgers.items():
@@ -151,6 +154,7 @@ def collect_day(day: str, run: Path, live_root: Path) -> dict:
                     "low_bid": hold.get("low_bid"),
                     "after_exit_peak": after.get("peak_bid"),
                     "last_bid": end.get("last_bid"),
+                    "rules": (extra.get(t["candidate_id"]) or {}).get("rules"),
                     "ref": ref_by_cid.get(t["candidate_id"]),
                 }
             )
@@ -205,6 +209,7 @@ def collect_day(day: str, run: Path, live_root: Path) -> dict:
                     "entry_reference": c["entry_reference"],
                     "invalidation": c["invalidation_level"],
                     "target": _target_price(c.get("target")),
+                    "rules": (t or {}).get("rules"),
                     "ref": ref_by_cid.get(cid),
                 }
             )
@@ -250,7 +255,8 @@ def collect(cfg: ReportConfig, root: Path = REPO_ROOT, now: datetime | None = No
     now = now or datetime.now(UTC)
     live_root = cfg.path("live_root", root)
     days = session_folders(live_root)
-    per_day = {d: collect_day(d, run, live_root) for d, run in days.items()}
+    rules = load_ledger_config().paths.exit_rules
+    per_day = {d: collect_day(d, run, live_root, rules) for d, run in days.items()}
     live = live_state(cfg, now, root)
     accounts = []
     for a in cfg.accounts:
@@ -284,6 +290,8 @@ def collect(cfg: ReportConfig, root: Path = REPO_ROOT, now: datetime | None = No
             "days": list(per_day),
             "engine": {k: v for k, v in live.items() if k != "accounts"},
             "accounts": accounts,
+            "rule_names": {"option": option_rule_names(rules), "r": r_rule_names(rules)},
+            "rule_note": f"fills {rules.fill_delay_s:g} s after a rule fires; what-ifs only",
             "limits": {
                 "trades": cfg.tables.trades_max_rows,
                 "signals": cfg.tables.signals_max_rows,

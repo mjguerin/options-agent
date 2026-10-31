@@ -91,8 +91,22 @@ class Report(_S):
     profit_factor_when_no_losses: Literal["undefined", "infinity"]
 
 
+class ExitRules(_S):
+    """Counterfactual exit rules, declared in advance (access log #25): what each would have done
+    on a trade's recorded path. A reading aid only; no trade is ever changed by them."""
+
+    fill_delay_s: float = Field(ge=0)  # a rule that fires is filled at the bid this long later
+    breakeven_after_pct: list[float]  # stop at entry once the bid is this far above it
+    half_at_pct: list[float]  # sell half at this gain, the rest exits as executed
+    trail_activate_pct: float = Field(ge=0)
+    trail_give_back_pct: float = Field(gt=0, lt=1)
+    r_tiers: list[float]  # on the underlying, in R: sell half at this gain; with and without a
+    # breakeven stop on the rest
+
+
 class Paths(_S):
     after_exit_window_min: float = Field(gt=0)  # how long after an exit the review keeps watching
+    exit_rules: ExitRules
 
 
 class Gates(_S):

@@ -195,6 +195,14 @@ def test_the_page_embeds_the_data_and_cannot_be_broken_by_text_in_it(root):
     assert "const POLL = false" in page(data, poll=False)
 
 
+def test_the_data_carries_the_exit_rule_names_and_every_signals_r_results(root):
+    data = collect(CFG, root, NOW)
+    assert data["rule_names"]["option"][0] == "As executed" and len(data["rule_names"]["r"]) == 5
+    skipped = brt(data)["signals"][1]  # not traded, yet its own position still has rule results
+    assert skipped["ref"]["rules_r"]["As specified"] == pytest.approx(-1.0)
+    assert "ruleBoard" in page(data, poll=False)
+
+
 def test_the_page_opens_on_the_summary_and_has_a_menu_to_pick_one_account(root):
     html = page(collect(CFG, root, NOW), poll=False)
     assert "view: 'all'" in html  # the opening view is the all-accounts summary

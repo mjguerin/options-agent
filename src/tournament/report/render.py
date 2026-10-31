@@ -72,6 +72,8 @@ TEMPLATE = r"""<!DOCTYPE html>
     border-bottom:none; color:var(--soft); }
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:6px 10px 10px; }
   .one { max-width:1200px; }
+  .board { display:flex; flex-wrap:wrap; gap:14px; margin:8px 0 10px; }
+  .board-box { flex:1 1 360px; min-width:0; background:#0f141f; border:1px solid var(--line2); border-radius:8px; padding:8px 10px; }
   .foot { color:#475569; font-size:11px; margin-top:18px; }
   svg.spark { display:block; }
   @media (max-width:900px) { .stats { grid-template-columns:repeat(3,1fr); }
@@ -155,7 +157,7 @@ function tradeTable(trades, multi) {
   const rows = shown.map((t) => `<tr>
     <td>${esc(t.day)}</td><td>${timeET(t.entry_at)}</td><td>${timeET(t.exit_at)}</td>
     <td>${esc(t.symbol)}</td><td>${t.qty}</td><td>${px(t.entry)}</td><td>${px(t.exit)}</td>
-    <td class="${cls(t.net_usd)}"><b>${money(t.net_usd, true)}</b></td>
+    <td class="${cls(t.net_usd)}" title="${tipOf(t.rules, (v) => money(v, true))}"><b>${money(t.net_usd, true)}</b></td>
     <td class="wrap">${esc((t.exit_reasons || []).map(nice).join(', ') || (t.open_qty ? 'still open' : '–'))}</td>
     <td>${dur(t.held_s)}</td><td>${px(t.peak_bid)}</td><td>${px(t.low_bid)}</td><td>${px(t.after_exit_peak)}</td>
     <td class="${cls(t.ref && t.ref.result_r)}">${t.ref ? rfmt(t.ref.result_r) : '–'}</td></tr>`).join('');
@@ -174,11 +176,41 @@ function signalTable(signals, multi) {
     const r = s.ref;
     return `<tr><td>${esc(s.day)}</td><td>${timeET(s.at)}</td><td>${arrow(s.direction)}</td>
       <td class="wrap">${tag}${why}</td><td>${esc(s.contract || '–')}</td><td>${q}</td><td>${px(s.entry_reference)}</td>
-      <td>${r ? esc(nice(r.exit_reason)) : '–'}</td><td class="${cls(r && r.result_r)}">${r ? rfmt(r.result_r) : '–'}</td>
+      <td title="${tipOf(r && r.rules_r, rfmt)}">${r ? esc(nice(r.exit_reason)) : '–'}</td><td class="${cls(r && r.result_r)}">${r ? rfmt(r.result_r) : '–'}</td>
       <td class="mute">${r ? rfmt(r.best_excursion_r) : '–'}</td></tr>`;
   }).join('');
   const more = signals.length > max ? `<div class="empty">${signals.length - max} older signals not shown.</div>` : '';
   return `<div class="scroll"><table><thead><tr><th>Date</th><th>Signal (ET)</th><th>Side</th><th>Result</th><th>Contract</th><th>Qty</th><th>SPY at signal</th><th title="how the strategy's own position on SPY ended, traded or not">Strategy exit</th><th title="its result in units of its own risk">Result R</th><th title="furthest it ran in favour, in R">Best R</th></tr></thead><tbody>${rows}</tbody></table></div>${more}`;
+}
+
+const tipOf = (obj, f) => obj ? esc(Object.entries(obj).map(([k, v]) => k + ': ' + f(v)).join('\n')) : '';
+
+function ruleBoard(trades, signals) {
+  const names = DATA.rule_names;
+  const withRules = trades.filter((t) => t.rules);
+  const base = names.option[0];
+  const opt = names.option.map((n) => {
+    const tot = withRules.reduce((s, t) => s + (t.rules[n] ?? 0), 0);
+    const baseTot = withRules.reduce((s, t) => s + (t.rules[base] ?? 0), 0);
+    const changed = withRules.filter((t) => Math.abs((t.rules[n] ?? 0) - t.rules[base]) > 0.005).length;
+    const losers = withRules.filter((t) => t.rules[base] < 0).reduce((s, t) => s + (t.rules[n] ?? 0), 0);
+    return `<tr><td>${esc(n)}</td><td class="${cls(tot)}"><b>${money(tot, true)}</b></td><td class="${cls(tot - baseTot)}">${n === base ? '–' : money(tot - baseTot, true)}</td><td>${n === base ? '–' : changed}</td><td class="${cls(losers)}">${money(losers, true)}</td></tr>`;
+  }).join('');
+  const rs = signals.filter((s) => s.ref && s.ref.rules_r);
+  const rbase = names.r[0];
+  const baseMean = rs.length ? rs.reduce((s, x) => s + x.ref.rules_r[rbase], 0) / rs.length : 0;
+  const rr = names.r.map((n) => {
+    const m = rs.length ? rs.reduce((s, x) => s + x.ref.rules_r[n], 0) / rs.length : null;
+    const w = rs.length ? rs.filter((x) => x.ref.rules_r[n] > 0).length / rs.length : null;
+    return `<tr><td>${esc(n)}</td><td class="${cls(m)}"><b>${m == null ? '–' : rfmt(m)}</b></td><td class="${cls(m == null ? 0 : m - baseMean)}">${n === rbase || m == null ? '–' : rfmt(m - baseMean)}</td><td>${w == null ? '–' : Math.round(w * 100) + '%'}</td></tr>`;
+  }).join('');
+  if (!withRules.length && !rs.length) return '';
+  return `<div class="board">
+    <div class="board-box"><div class="kpi-label">Exit rules on the option (traded signals: ${withRules.length})</div>
+      <table><thead><tr><th>Rule</th><th>P&amp;L</th><th>vs executed</th><th>Trades changed</th><th>Losers only</th></tr></thead><tbody>${opt || ''}</tbody></table></div>
+    <div class="board-box"><div class="kpi-label">Exit rules on SPY, in R (every signal, traded or not: ${rs.length})</div>
+      <table><thead><tr><th>Rule</th><th>Mean R</th><th>vs specified</th><th>Win share</th></tr></thead><tbody>${rr}</tbody></table></div>
+    <div class="subtitle" style="flex-basis:100%;margin:2px 0 0">What-ifs on the recorded paths, ${esc(DATA.rule_note)}. They change no trade. A rule that fires after the real exit never acts. The win share rises when small gains are locked even when the money does not; read the money. A few trades are an anecdote, not a finding.</div></div>`;
 }
 
 function card(a, set) {
@@ -207,7 +239,7 @@ function card(a, set) {
     <div class="funnel">Setups started ${started}${endedTxt ? ' · dropped: ' + esc(endedTxt) : ''} · signals ${signals.length}</div>
     <details open><summary>Positions <span class="n">${nOpen}</span></summary>${openTable(a)}</details>
     <details open><summary>Trades <span class="n">${trades.length}</span></summary>${tradeTable(trades, multi)}</details>
-    <details open><summary>Signals <span class="n">${signals.length}</span> <span class="n">· traded or not</span></summary>${signalTable(signals, multi)}</details>
+    <details open><summary>Signals <span class="n">${signals.length}</span> <span class="n">· traded or not</span></summary>${ruleBoard(trades, signals)}${signalTable(signals, multi)}</details>
   </div>`;
 }
 

@@ -19,6 +19,7 @@ from pathlib import Path
 import pandas as pd
 
 from tournament.ledger.config import LedgerConfig
+from tournament.ledger.exit_rules import option_rules
 
 
 def _secs(a: pd.Timestamp, b: pd.Timestamp) -> float:
@@ -142,6 +143,24 @@ def build_paths(session_dir: Path, cfg: LedgerConfig) -> dict:
                     quotes, t["symbol"], entry_at, exit_at, t["broker_entry"], t["broker_exit"],
                     t["qty"], mult, cfg.paths.after_exit_window_min,
                 )  # fmt: skip
+            row["rules"] = None
+            if (
+                entry_at is not None
+                and exit_at is not None
+                and not quotes.empty
+                and t["broker_exit"]
+            ):
+                held = quotes[
+                    (quotes["symbol"] == t["symbol"])
+                    & (quotes["bid"] > 0)
+                    & (quotes["second"] >= entry_at.floor("s"))
+                    & (quotes["second"] <= exit_at)
+                ].sort_values("second")
+                if len(held):
+                    row["rules"] = option_rules(
+                        held.set_index("second")["bid"], t["broker_entry"], t["broker_exit"],
+                        t["qty"], mult, cfg.paths.exit_rules, exit_at,
+                    )  # fmt: skip
             if not refs.empty and not bars.empty:
                 match = refs[refs["candidate_id"] == t["candidate_id"]]
                 if not match.empty:
