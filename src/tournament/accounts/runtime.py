@@ -16,6 +16,7 @@ manager, which prevents duplicate liquidations (EX-05).
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import date
@@ -32,6 +33,8 @@ from tournament.risk.config import RiskConfig
 from tournament.risk.daily import DailyLossGuard, OpenPosition, premium_stop_hit
 from tournament.risk.selection import Selection, select_contract
 from tournament.risk.sizing import SizeResult, equity_basis, size_order
+
+log = logging.getLogger(__name__)
 
 
 class WrongAccount(RuntimeError):
@@ -80,6 +83,8 @@ class AccountRuntime:
     operator_halt: str | None = (
         None  # set by an operator control; cleared only by a validated resume
     )
+    # called with every entry decision, accepted or not, so each signal's fate is on record
+    record: Callable[[EntryDecision, dict], None] | None = None
 
     def __post_init__(self) -> None:
         self.guard = DailyLossGuard(self.risk.daily_loss, self.risk.sizing.contract_multiplier)
@@ -90,6 +95,11 @@ class AccountRuntime:
             raise WrongAccount(f"{cand['account_binding']!r} sent to {self.binding!r}")
         d = replace(self._decide(now, cand), at=now)
         self.decisions.append(d)
+        if self.record is not None:
+            try:
+                self.record(d, cand)
+            except Exception:  # noqa: BLE001 - a record that cannot be written never blocks a trade
+                log.exception("could not record the entry decision")
         return d
 
     def _reject(self, cid: str, *reasons: str, **kw) -> EntryDecision:

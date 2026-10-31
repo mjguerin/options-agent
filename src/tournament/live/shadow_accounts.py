@@ -9,6 +9,7 @@ broker: the broker object is the simulation.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -46,6 +47,7 @@ class ShadowAccounts:
         self.collector, self.tick_every = collector, pd.Timedelta(seconds=tick_every_s)
         self.reconcile_every = pd.Timedelta(seconds=reconcile_every_s)
         self._last_reconcile: pd.Timestamp | None = None
+        self.decisions_file = db_path.parent / "decisions.jsonl"  # one line per entry decision
         self.engine = create_engine(f"sqlite:///{db_path}")
         metadata.create_all(self.engine)
         self.store = IntentStore(self.engine)
@@ -80,6 +82,7 @@ class ShadowAccounts:
                 starting_balance,
                 cutoff,
                 advance=sim.advance,
+                record=self._record_decision,
             )
         self.router = AccountRouter(runtimes)
         self._last_tick: pd.Timestamp | None = None
@@ -91,6 +94,28 @@ class ShadowAccounts:
             state = rt.restore_state()
             if n or state:
                 self.restored[binding] = {"orders": n, **state}
+
+    def _record_decision(self, d, cand: dict) -> None:
+        """Every signal's fate, executed or not, appended as it happens (a restart keeps it)."""
+        sel, size = d.selection, d.size
+        row = {
+            "at": None if d.at is None else d.at.isoformat(),
+            "account": cand["account_binding"],
+            "candidate_id": d.candidate_id,
+            "accepted": d.accepted,
+            "reasons": list(d.reasons),
+            "contract": None if sel is None else sel.symbol,
+            "right": None if sel is None else sel.right,
+            "strike": None if sel is None else sel.strike,
+            "ask": None if sel is None or sel.quote is None else sel.quote.ask,
+            "quantity": None if size is None else size.quantity,
+            "requested_quantity": None if size is None else size.requested_quantity,
+            "capped_by": None if size is None else size.capped_by,
+            "premium_at_risk_usd": None if size is None else size.premium_at_risk,
+            "planned_stop_risk_usd": None if size is None else size.planned_stop_risk,
+        }
+        with self.decisions_file.open("a") as f:
+            f.write(json.dumps(row, default=str) + "\n")
 
     # ---- hooks the engine and the stream call -----------------------------------------------
     def attach(self, harness) -> None:

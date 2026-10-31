@@ -1,0 +1,32 @@
+# The one-page report (served on loopback, reached through an SSH tunnel). DRAFT.
+# Reads what the engine already writes (ledgers, records, decisions, the published state); it
+# never writes to the trading system and a failure here never touches the engine.
+# No defaults in code.
+
+version: report-v1-draft
+
+server:
+  host: 127.0.0.1                    # loopback only (NFR-14); anything else is refused at start
+  port: 8502
+  poll_s: 10                         # how often an open page asks for fresh data
+
+data:
+  live_root: data/live               # data/live/<day>/<run>/ledger, records, bars
+  state_file: data/run/engine.state.json
+  heartbeat_file: data/run/engine.heartbeat.json
+  state_max_age_s: 30                # older than this the engine is shown as not reporting
+  timezone: America/New_York         # every time on the page is shown in this zone
+
+accounts:                            # the order and the names of the cards
+  - {id: vpc, name: VWAP pullback continuation}
+  - {id: orb, name: Opening range breakout}
+  - {id: brt, name: Break and retest}
+  - {id: fbr, name: Failed breakout reversal}
+  - {id: vmr, name: VWAP mean reversion}
+
+tables:
+  trades_max_rows: 60                # per account, newest first; the rest are counted
+  signals_max_rows: 80
+
+labels:
+  results: gross of unmodeled costs  # shown beside every money figure until costs are approved

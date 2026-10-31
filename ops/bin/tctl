@@ -13,9 +13,10 @@ SUP=(supervisorctl -c "$REPO/data/run/supervisord.conf")
 LOGS="$HOME/Library/Logs/options-tournament"
 DB=options_tournament
 SHARED=/Users/Shared/options-tournament
-SERVICES=(alerts api dashboard)
+SERVICES=(alerts api dashboard report)
 DASH_PORT=8501
 API_PORT=8800
+REPORT_PORT=8502
 
 say() { printf '%s\n' "$*"; }
 bold() { printf '\n== %s\n' "$*"; }
@@ -72,6 +73,7 @@ cmd_health() {
     done
     psql -d "$DB" -Atc 'select 1' >/dev/null 2>&1 && ok "database answers" || no "database not answering"
     curl -s -o /dev/null -m 3 "http://127.0.0.1:$DASH_PORT/" && ok "dashboard answers on $DASH_PORT" || no "dashboard not answering on $DASH_PORT"
+    curl -s -o /dev/null -m 3 "http://127.0.0.1:$REPORT_PORT/health" && ok "report answers on $REPORT_PORT" || no "report not answering on $REPORT_PORT"
     curl -s -o /dev/null -m 3 "http://127.0.0.1:$API_PORT/docs" && ok "API answers on $API_PORT" || no "API not answering on $API_PORT"
     if age="$(engine_live)"; then ok "engine beating (${age}s)"; else say "  --    engine not beating (normal outside a session)"; fi
     local open
@@ -102,13 +104,13 @@ cmd_health() {
 cmd_service() {  # start|stop|restart <name|all>
     local action="$1" target="${2:-}" yes="${3:-}"
     need_sup
-    [[ -n "$target" ]] || { say "usage: tctl $action <alerts|api|dashboard|engine|all>"; exit 2; }
+    [[ -n "$target" ]] || { say "usage: tctl $action <alerts|api|dashboard|report|engine|all>"; exit 2; }
     if [[ "$target" == "all" ]]; then
         for s in "${SERVICES[@]}"; do "${SUP[@]}" "$action" "$s"; done
         say "(the engine was not touched: use  tctl $action engine  for that)"
         return
     fi
-    valid_service "$target" || { say "unknown program '$target' (alerts, api, dashboard, engine, all)"; exit 2; }
+    valid_service "$target" || { say "unknown program '$target' (alerts, api, dashboard, report, engine, all)"; exit 2; }
     if [[ "$target" == "engine" && "$action" != "start" ]]; then
         if age="$(engine_live)"; then
             say "The engine is running a live session (heartbeat ${age}s ago)."
@@ -165,7 +167,8 @@ cmd_dashboard() {
 
 cmd_tunnel() {
     bold "From your MacBook, open the tunnel, then browse http://localhost:$DASH_PORT"
-    say "  ssh -N -L $DASH_PORT:127.0.0.1:$DASH_PORT -L $API_PORT:127.0.0.1:$API_PORT mini"
+    say "  ssh -N -L $DASH_PORT:127.0.0.1:$DASH_PORT -L $API_PORT:127.0.0.1:$API_PORT -L $REPORT_PORT:127.0.0.1:$REPORT_PORT mini"
+    say "  one page:  http://localhost:$REPORT_PORT      full dashboard:  http://localhost:$DASH_PORT"
 }
 
 cmd_incidents() {
@@ -287,8 +290,8 @@ tctl: controls for the tournament (run on the mini, as the owner)
   dashboard [--force]     make sure the dashboard runs; --force clears a stray process off its port
   tunnel                  the ssh command to run on your MacBook to reach the dashboard and API
 
-  start|stop|restart <alerts|api|dashboard|all>
-                          all = alerts, api and dashboard; the engine is never part of "all"
+  start|stop|restart <alerts|api|dashboard|report|all>
+                          all = alerts, api, dashboard and report; the engine is never part of "all"
   restart engine --yes    only with --yes while a session is live (about 7 minutes to recover)
   stop engine --yes       same; the Supervisor may restart it by itself after a stop
 

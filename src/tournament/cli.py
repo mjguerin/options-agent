@@ -350,6 +350,36 @@ def _breakglass(args: argparse.Namespace) -> int:
     return 0
 
 
+def _report_run(args: argparse.Namespace) -> int:
+    import logging
+
+    import uvicorn
+
+    from tournament.report.config import ReportConfigError, load_report_config
+    from tournament.report.server import create_app
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    try:
+        cfg = load_report_config()
+    except ReportConfigError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    uvicorn.run(create_app(cfg), host=cfg.server.host, port=cfg.server.port, log_level="warning")
+    return 0
+
+
+def _report_build(args: argparse.Namespace) -> int:
+    from tournament.report.config import load_report_config
+    from tournament.report.data import collect
+    from tournament.report.render import page
+
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(page(collect(load_report_config()), poll=False))
+    print(out)
+    return 0
+
+
 def _api_run(args: argparse.Namespace) -> int:
     import logging
 
@@ -489,6 +519,13 @@ def build_parser() -> argparse.ArgumentParser:
     dash = sub.add_parser("dashboard", help="the dashboard (loopback only)")
     dash_sub = dash.add_subparsers(dest="dashboard_command", required=True)
     dash_sub.add_parser("run", help="serve the dashboard").set_defaults(func=_dashboard_run)
+
+    rep = sub.add_parser("report", help="the one-page report (loopback only)")
+    rep_sub = rep.add_subparsers(dest="report_command", required=True)
+    rep_sub.add_parser("run", help="serve the report").set_defaults(func=_report_run)
+    build = rep_sub.add_parser("build", help="write the page as one static HTML file")
+    build.add_argument("--out", default=str(REPO_ROOT / "data" / "reports" / "onepager.html"))
+    build.set_defaults(func=_report_build)
 
     api = sub.add_parser("api", help="the control API (loopback only)")
     api_sub = api.add_subparsers(dest="api_command", required=True)

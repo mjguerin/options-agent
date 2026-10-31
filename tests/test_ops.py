@@ -177,7 +177,13 @@ def test_every_job_file_renders_without_placeholders(rendered):
 
 
 @pytest.mark.parametrize(
-    "program, cmd", [("alerts", "alerts run"), ("api", "api run"), ("dashboard", "dashboard run")]
+    "program, cmd",
+    [
+        ("alerts", "alerts run"),
+        ("api", "api run"),
+        ("dashboard", "dashboard run"),
+        ("report", "report run"),
+    ],
 )
 def test_the_alert_bot_and_the_api_run_all_day_and_restart_themselves(rendered, program, cmd):
     cp = configparser.RawConfigParser()
@@ -246,4 +252,6 @@ def test_tctl_refuses_an_unknown_command_and_never_includes_the_engine_in_all():
     bad = subprocess.run([str(TCTL), "nonsense"], capture_output=True, text=True)
     assert bad.returncode == 2 and "controls for the tournament" in bad.stdout
     text = TCTL.read_text()
-    assert "SERVICES=(alerts api dashboard)" in text  # "all" is these three, never the engine
+    assert (
+        "SERVICES=(alerts api dashboard report)" in text
+    )  # "all" is these three, never the engine
