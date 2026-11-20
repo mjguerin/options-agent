@@ -54,6 +54,7 @@ class DailyLoss(_Section):
     measure: Literal["realized_only", "realized_plus_open_at_bid"]
     on_breach: Literal["halt_entries", "halt_and_flatten"]
     unmarked_position: Literal["full_loss", "entry_cost"]
+    unmarked_grace_s: float = Field(ge=0)  # no usable bid this long before it counts as a loss
     size_to_headroom: bool  # cap an entry so its worst planned loss fits under the limit's room
     assumed_extra_loss_pct: float = Field(ge=0, le=1)  # points of premium assumed beyond the stop
 

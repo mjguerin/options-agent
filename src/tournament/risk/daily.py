@@ -1,10 +1,12 @@
-"""Daily loss limit and the premium stop (RK-01, RK-02, EX-02; D-56, D-58).
+"""Daily loss limit and the premium stop (RK-01, RK-02, EX-02; D-56, D-58, D-95).
 
 The limit counts realized loss plus, if configured, the marked loss of open positions at the
-bid. The first time the total reaches the limit, entries halt for the rest of the session and
-the halt never lifts when marks recover. A halt is not an instruction to close (RK-02) unless
-`on_breach` says halt_and_flatten. The premium stop is an execution-only exit (D-31): it never
-changes strategy state.
+bid. A position with no usable bid counts as a total loss of its premium only once it has had no
+usable bid for `unmarked_grace_s` (D-95): a quote that is crossed or late for a few seconds is
+a data glitch, not a loss. The first time the total reaches the limit, entries halt for the
+rest of the session and the halt never lifts when marks recover. A halt is not an instruction
+to close (RK-02) unless `on_breach` says halt_and_flatten. The premium stop is an execution-only
+exit (D-31): it never changes strategy state.
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ class LossStatus:
     entries_allowed: bool
     flatten: bool
     unmarked: int  # open positions valued by the unmarked rule
+    unmarked_for_s: float = 0.0  # how long some position has had no usable bid, continuously
 
 
 class DailyLossGuard:
@@ -40,6 +43,7 @@ class DailyLossGuard:
         self.reset_session()
 
     def reset_session(self) -> None:
+        self._unmarked_since: pd.Timestamp | None = None
         self.breached_at: pd.Timestamp | None = None
         self.breach_loss: float | None = (
             None  # the loss, by the configured measure, when it tripped
@@ -66,15 +70,18 @@ class DailyLossGuard:
             "unmarked_positions": unmarked,
         }
 
-    def _loss(self, realized_pnl: float, positions: list[OpenPosition]) -> tuple[float, int]:
+    def _loss(
+        self, realized_pnl: float, positions: list[OpenPosition], count_unmarked: bool = True
+    ) -> tuple[float, int]:
         """The day's loss by the configured measure (positive = money lost), and how many open
-        positions had no usable bid. Reads only."""
+        positions had no usable bid. With `count_unmarked` False those positions add nothing: the
+        loss that is actually priced. Reads only."""
         open_pnl, unmarked = 0.0, 0
         if self.cfg.measure == "realized_plus_open_at_bid":
             for p in positions:
                 if p.bid is None:
                     unmarked += 1
-                    if self.cfg.unmarked_position == "full_loss":
+                    if count_unmarked and self.cfg.unmarked_position == "full_loss":
                         open_pnl -= p.entry_price * p.quantity * self.multiplier
                 else:
                     open_pnl += (p.bid - p.entry_price) * p.quantity * self.multiplier
@@ -89,7 +96,21 @@ class DailyLossGuard:
     def update(
         self, now: pd.Timestamp, realized_pnl: float, positions: list[OpenPosition]
     ) -> LossStatus:
-        loss, unmarked = self._loss(realized_pnl, positions)
+        conservative, unmarked = self._loss(realized_pnl, positions)
+        if unmarked:
+            if self._unmarked_since is None:
+                self._unmarked_since = now
+        else:
+            self._unmarked_since = None  # a usable bid resets the clock
+        blind_for = (
+            0.0 if self._unmarked_since is None else (now - self._unmarked_since).total_seconds()
+        )
+        # until the grace has run out, only what is actually priced can trip the limit
+        loss = (
+            conservative
+            if blind_for >= self.cfg.unmarked_grace_s
+            else self._loss(realized_pnl, positions, count_unmarked=False)[0]
+        )
         if self.breached_at is None and loss >= self.cfg.limit_usd - 1e-9:
             self.breached_at = now
             self.breach_loss = loss
@@ -101,6 +122,7 @@ class DailyLossGuard:
             not breached,
             breached and self.cfg.on_breach == "halt_and_flatten",
             unmarked,
+            blind_for,
         )
 
 

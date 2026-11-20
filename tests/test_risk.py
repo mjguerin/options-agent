@@ -259,10 +259,81 @@ def test_realized_only_ignores_open_positions(tmp_path):
 
 def test_an_unmarked_position_follows_the_configured_assumption(tmp_path):
     p = OpenPosition(occ(765), 10, 1.44, None)
-    s = guard().update(T0, 0, [p])
+    g = guard()
+    g.update(T0, 0, [p])  # the clock starts
+    late = T0 + pd.Timedelta(seconds=CFG.daily_loss.unmarked_grace_s)
+    s = g.update(late, 0, [p])  # no usable bid for the whole grace: the premium counts as lost
     assert s.unmarked == 1 and s.loss == pytest.approx(1440) and s.breached
     soft = load_risk_config(edited(tmp_path, daily_loss={"unmarked_position": "entry_cost"}))
-    assert guard(soft).update(T0, 0, [p]).loss == 0
+    g2 = guard(soft)
+    g2.update(T0, 0, [p])
+    assert g2.update(late, 0, [p]).loss == 0
+
+
+# ---- the grace before an unpriced position counts as a total loss (D-95) -----------------------
+
+GRACE = CFG.daily_loss.unmarked_grace_s
+BLIND = OpenPosition(occ(765), 10, 1.44, None)  # a $1,440 premium with no usable bid
+
+
+def after(s: float) -> pd.Timestamp:
+    return T0 + pd.Timedelta(seconds=s)
+
+
+def test_a_glitch_shorter_than_the_grace_trips_nothing():
+    g = guard()
+    for s in (0, 1, 10, GRACE - 1):
+        st = g.update(after(s), 0, [BLIND])
+        assert not st.breached and st.loss == 0 and st.unmarked == 1  # nothing is priced as lost
+    assert st.unmarked_for_s == pytest.approx(GRACE - 1)
+    back = g.update(after(GRACE), 0, [OpenPosition(occ(765), 10, 1.44, 1.40)])  # the bid returns
+    assert not back.breached and g.breached_at is None
+
+
+def test_an_unpriced_position_counts_as_a_total_loss_once_the_grace_has_run_out():
+    g = guard()
+    g.update(after(0), 0, [BLIND])
+    st = g.update(after(GRACE), 0, [BLIND])
+    assert st.breached and st.loss == pytest.approx(1440) and g.breach_loss == pytest.approx(1440)
+
+
+def test_a_usable_bid_resets_the_clock_so_flicker_never_adds_up():
+    g = guard()
+    marked = OpenPosition(occ(765), 10, 1.44, 1.43)
+    g.update(after(0), 0, [BLIND])
+    g.update(after(GRACE - 10), 0, [BLIND])
+    g.update(after(GRACE - 9), 0, [marked])  # priced again
+    st = g.update(after(GRACE + 30), 0, [BLIND])  # a new gap starts here, not at 0
+    assert not st.breached and st.unmarked_for_s == 0.0
+    assert g.update(after(GRACE + 30 + GRACE), 0, [BLIND]).breached  # and a long one does trip it
+
+
+def test_a_priced_breach_still_trips_at_once_with_no_grace():
+    marked = OpenPosition(occ(765), 10, 1.44, 0.40)  # -$1,040 at the bid
+    st = guard().update(after(0), 0, [marked])
+    assert st.breached and st.loss == pytest.approx(1040)
+
+
+def test_priced_losses_count_while_another_position_is_in_its_grace():
+    st = guard().update(after(0), -480, [BLIND])  # $480 realized; the glitch adds nothing yet
+    assert not st.breached and st.loss == pytest.approx(480)
+    assert guard().update(after(0), -520, [BLIND]).breached  # a real $520 loss trips it
+
+
+def test_flatten_waits_for_the_grace_too(tmp_path):
+    cfg = load_risk_config(edited(tmp_path, daily_loss={"on_breach": "halt_and_flatten"}))
+    g = guard(cfg)
+    assert not g.update(after(0), 0, [BLIND]).flatten  # a one-second crossed quote sells nothing
+    assert g.update(after(GRACE), 0, [BLIND]).flatten
+
+
+def test_headroom_stays_conservative_for_sizing_while_a_position_is_unpriced():
+    assert guard().headroom(0, [BLIND]) == pytest.approx(500 - 1440)
+
+
+def test_a_zero_grace_is_the_old_immediate_rule(tmp_path):
+    cfg = load_risk_config(edited(tmp_path, daily_loss={"unmarked_grace_s": 0}))
+    assert guard(cfg).update(after(0), 0, [BLIND]).breached
 
 
 def test_flatten_is_only_requested_when_configured(tmp_path):

@@ -433,3 +433,28 @@ def test_the_rule_can_be_switched_off_in_the_config(tmp_path):
     rt.realized_pnl = lambda: -470.0
     prices(m, at(0))
     assert rt.on_candidate(at(0), cand()).accepted  # as before: sized to the budget alone
+
+
+# ---- a glitch that leaves a position unpriced no longer halts the account (D-95) ----------------
+
+
+def test_a_one_second_crossed_quote_does_not_halt_the_account():
+    rt, sim, m = build()
+    hold(rt, m)  # 13 contracts at 1.44: $1,872 of premium, well over the $500 limit if "lost"
+    prices(m, at(10), call=(1.30, 1.20))  # bid above ask for a moment: no usable bid
+    rt.on_tick(at(10))
+    assert rt.halted is None and rt.guard.breached_at is None
+    prices(m, at(11), call=(1.43, 1.44))
+    rt.on_tick(at(11))
+    assert rt.halted is None and rt.guard.breached_at is None  # and it never latched
+
+
+def test_a_position_that_stays_unpriced_past_the_grace_halts_the_account():
+    rt, sim, m = build()
+    hold(rt, m)
+    grace = int(rt.risk.daily_loss.unmarked_grace_s)
+    for s in range(10, 10 + grace + 2):  # the glitch does not clear
+        prices(m, at(s), call=(1.30, 1.20))
+        rt.on_tick(at(s))
+    assert rt.halted == "DAILY_LIMIT"
+    assert rt.guard.breach_loss == pytest.approx(13 * 1.44 * 100)  # the whole premium, as agreed
