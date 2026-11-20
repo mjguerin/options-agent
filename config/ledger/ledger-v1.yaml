@@ -9,7 +9,7 @@
 # decisions and not on a fill that went better or worse for it. The two are reconciled through an
 # explained difference, never netted and never combined into one result.
 #
-# Until the cost model is approved, results are labelled "gross of unmodeled costs".
+# Sessions before the cost model was approved (2026-11-20) keep their "gross of unmodeled costs" label.
 # No defaults in code.
 
 version: ledger-v1
@@ -23,14 +23,16 @@ evaluation:
   contract_multiplier: 100
   missing_quote: flag_and_use_broker # flag_and_use_broker | exclude: a decision with no usable quote
 
-costs:                               # D10: structure agreed; rates not yet verified
-  status: unapproved                 # unapproved | approved: results are labelled gross until approved
-  schedule:                          # effective-dated, per contract and per side
-    - effective_from: 2026-10-26
-      commission_per_contract: 0.0
-      regulatory_fee_per_contract: 0.0
-      source: placeholder until the owner verifies the account's commission and the current
-        Alpaca options regulatory (TAF, ORF, OCC, CAT) fee schedule
+costs:                               # D10: APPROVED by the owner on 2026-11-20
+  status: approved                   # unapproved | approved: results are labelled gross until approved
+  schedule:                          # effective-dated; per contract and per side unless stated
+    - effective_from: 2024-01-01     # the current schedule is used for the whole history (D10)
+      commission_per_contract: 0.0   # no commission for self-directed accounts trading through the API
+      regulatory_fee_per_contract: 0.0403   # ORF 0.015 + OCC clearing 0.025 + CAT 0.0003, buys and sells
+      sec_fee_rate_on_sells: 0.0000206      # of the sale value; FINRA TAF is $0 per contract
+      source: Alpaca Clearing Brokerage Fee Schedule (https://alpaca.markets/disclosures), read
+        2026-11-20; subject to change without notice; fee types are really rounded up to a cent per
+        day and account, which is ignored here; paper accounts post no fees, so these are modeled
 
 stress:                              # execution-cost scenarios run on every trade (BRD 12.4, D-80)
   - {name: base,           extra_slippage_ticks: 0, fee_multiplier: 1.0}

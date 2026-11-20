@@ -224,7 +224,8 @@ def build_trades(
         broker_gross = (p_out - p_in) * closed * mult if closed else 0.0
         priced = closed and e_entry is not None and e_exit is not None
         eval_gross = ((e_exit - e_entry) * closed * mult) if priced else 0.0
-        fees = per_contract * (q_in + q_out)
+        sale_value = p_out * q_out * mult  # what was sold: the SEC fee is a share of it
+        fees = per_contract * (q_in + q_out) + rate.sec_fee_rate_on_sells * sale_value
         stress = {}
         for sc in cfg.stress:
             if priced:

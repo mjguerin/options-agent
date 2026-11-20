@@ -59,7 +59,11 @@ def test_both_ledgers_are_written_and_reconcile(tmp_path):
     assert body["reconciliation"]["ok"] and res["accounts"][rt.binding]["reconciled"]
     assert s["broker_realized_gross_usd"] == pytest.approx((1.50 - 1.44) * 13 * 100)
     assert s["eval_realized_gross_usd"] == pytest.approx(78.0)  # same quotes: the ledgers agree
-    assert s["net_pnl_est_usd"] == pytest.approx(78.0) and s["open_positions"] == []
+    fees = 0.0403 * (13 + 13) + 0.0000206 * (
+        1.50 * 13 * 100
+    )  # per contract both sides + SEC on the sale
+    assert s["fees_usd"] == pytest.approx(fees)
+    assert s["net_pnl_est_usd"] == pytest.approx(78.0 - fees) and s["open_positions"] == []
     assert body["trades"][0]["exit_reasons"] == ["REF_TARGET"]
     assert s["operational"]["uncertain_slots"] == 1 and s["operational"]["halted_slots"] == 1
     assert [r["account"] for r in json.loads((out / "ranking.json").read_text())] == [rt.binding]
@@ -141,7 +145,7 @@ def test_the_whole_close_path_runs_on_the_files_the_engine_really_writes(tmp_pat
     body = json.loads((out / "acct_vpc.json").read_text())
     assert body["metrics"]["equity_points"] == 3 and body["metrics"]["max_drawdown_usd"] == 0.0
     assert body["execution_ledger_name"] == "modeled-execution ledger"
-    assert body["summary"]["result_label"] == "gross of unmodeled costs"
+    assert body["summary"]["result_label"] == "net of approved costs"
     with engine.connect() as c:
         assert c.execute(select(func.count()).select_from(ledger_equity)).scalar() == 3
         detail = json.loads(c.execute(select(ledger_trades.c.detail)).scalar())

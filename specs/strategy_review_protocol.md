@@ -1,6 +1,6 @@
-# Strategy review protocol (DRAFT for owner approval)
+# Strategy review protocol (APPROVED by the owner, 2026-11-20)
 
-Drafted Nov 3, 2026; revised Nov 20 with the owner's scope decision. Nothing in this document is in force until the owner approves it. Its purpose
+Drafted Nov 3, 2026; approved by the owner on Nov 20, 2026 with the scope decision below. Its purpose
 is to settle **in advance, before any outcome is looked at**, when and how the five strategies may
 be changed, so that a change comes from evidence and not from the last few trades.
 
@@ -86,7 +86,7 @@ winner can run much further, so a change that helps in R can differ in dollars (
 have been positive while its replay R was negative). For that reason a candidate is also scored at
 the **option level at the Validate stage**, not only after Confirm: the stored one-second or
 one-minute option data replayed with the D-80 benchmark and the premium stop, paired by session
-against v1, in dollars per position (gross of costs until D10 is approved).
+against v1, in dollars per position (net of the approved costs, D10).
 
 **Primary measure:** the paired difference in mean R, v2 minus v1, over the same sessions, with
 a block bootstrap over sessions for its uncertainty. **Secondary, reported always:** win share,
@@ -117,8 +117,7 @@ effect is smaller than the partition can detect is declared **untestable**, not 
 
 1. The owner approves the finalist's v2 specs (new decisions, new `specs-v2` tag).
 2. The Step 2 replay gate is rerun for the v2 code: determinism, traceability, no look-ahead.
-3. The option-level replay is repeated on the Confirm partition with the approved costs (the cost
-   model, D10, must be approved first, or the result is labelled gross).
+3. The option-level replay is repeated on the Confirm partition with the approved costs (D10).
 4. v2 runs in shadow **beside** v1 on the same signals, as its own segment, for a period fixed in
    advance (D09). It does not replace v1 and nothing is back-filled.
 5. Entry into the tournament follows D09 and the promotion gates (D-83), not this protocol.
@@ -131,16 +130,21 @@ effect is smaller than the partition can detect is declared **untestable**, not 
 - If no hypothesis survives, the review stops and v1 stands.
 - A hypothesis cannot be rescued by changing its value, its partition or its bar after a run.
 
-## 9. Decisions needed from the owner
+## 9. Decisions
 
-Settled on Nov 20: all five strategies stay; one strategy at a time; round 1 is BRT.
+Settled on Nov 20 by the owner:
 
-1. Approve the partition split in section 3 (Design / Screen / Validate / Confirm), or amend it.
-2. Approve the caps: 6 hypotheses a round, 2 rounds, 2 finalists.
-3. Approve the pass bars in section 5 (including the option-level check at Validate), or set
-   different ones.
-4. Decide whether the "no new indicators and no parameter optimization" posture stays. BRT-H1 to H3
-   only change existing parameter values, so they need it lifted for those three parameters.
-5. Keep, rewrite or discard BRT-H1 to H3, and add your own, up to 6.
-6. Confirm the ordering with the cost model (D10): net-of-cost evidence is only required once D10
-   is approved; until then results are labelled gross.
+1. The partition split (Design / Screen / Validate / Confirm).
+2. The caps: 6 hypotheses a round, 2 rounds, 2 finalists.
+3. The pass bars, including the option-level check at Validate.
+4. The "no new indicators and no parameter optimization" posture is lifted for the three BRT
+   parameters named in section 4 only.
+5. BRT-H1 to H3 are kept as the starting list.
+6. **D10, the cost model, is approved** (D-88): no commission; 0.0403 dollars per contract on each
+   side (ORF, OCC and CAT) plus the SEC fee on the sale value; the current schedule applied to the
+   whole history. Results from Nov 20 are labelled "net of approved costs", so every bar in section 5
+   is net from the first Screen run. Fees are about 1% of a typical trade's result and equal for v1
+   and v2, so they decide little; their purpose here is to fix the assumption before any run.
+
+**This protocol is therefore approved as written.** The next step is to register BRT-H1 to H3 in
+the access log with their frozen values, then the first Screen run.

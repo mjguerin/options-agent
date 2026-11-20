@@ -37,7 +37,7 @@ CALL2 = "SPY261026C00766000"
 BASE = load_ledger_config()
 RATE = CostRate(
     effective_from=date(2026, 10, 26), commission_per_contract=0.65,
-    regulatory_fee_per_contract=0.0, source="test",
+    regulatory_fee_per_contract=0.0, sec_fee_rate_on_sells=0.0, source="test",
 )  # fmt: skip
 CFG = BASE.model_copy(
     update={"costs": BASE.costs.model_copy(update={"status": "approved", "schedule": [RATE]})}
@@ -49,6 +49,7 @@ ALL_GATES = BASE.promotion_gates.model_copy(
     }
 )  # fmt: skip
 GATED = CFG.model_copy(update={"promotion_gates": ALL_GATES})
+UNAPPROVED = BASE.costs.model_copy(update={"status": "unapproved"})
 
 
 def at(s: float) -> pd.Timestamp:
@@ -360,7 +361,7 @@ def test_an_unset_threshold_blocks_qualification_instead_of_dropping_the_require
 
 
 def test_unapproved_costs_make_the_cost_dependent_gates_not_evaluable():
-    cfg = GATED.model_copy(update={"costs": BASE.costs})  # status: unapproved
+    cfg = GATED.model_copy(update={"costs": UNAPPROVED})
     r = rank_accounts([entry("acct:vpc", 200.0)], cfg)[0]
     assert not r["promotion_qualified"]
     for name in ("min_net_pnl_usd", "min_harsh_net_pnl_usd"):
@@ -459,7 +460,7 @@ def test_shadow_calls_the_execution_record_the_modeled_execution_ledger_not_a_br
 
 
 def test_results_are_labelled_gross_until_the_cost_model_is_approved(store):
-    unapproved = session_ledger(store, cfg=CFG.model_copy(update={"costs": BASE.costs}))
+    unapproved = session_ledger(store, cfg=CFG.model_copy(update={"costs": UNAPPROVED}))
     assert unapproved["summary"]["result_label"] == "gross of unmodeled costs"
     assert unapproved["summary"]["cost_status"] == "unapproved"
     assert session_ledger(store)["summary"]["result_label"] == "net of approved costs"
@@ -470,7 +471,7 @@ def test_results_are_labelled_gross_until_the_cost_model_is_approved(store):
 def test_cost_rates_are_effective_dated(tmp_path):
     later = CostRate(
         effective_from=date(2026, 12, 1), commission_per_contract=0.5,
-        regulatory_fee_per_contract=0.02, source="test",
+        regulatory_fee_per_contract=0.02, sec_fee_rate_on_sells=0.0, source="test",
     )  # fmt: skip
     costs = CFG.costs.model_copy(update={"schedule": [RATE, later]})
     assert costs.rate_on("2026-11-30").commission_per_contract == 0.65
@@ -587,3 +588,26 @@ def test_a_correction_carries_its_explanation(store):
         revision_note="fee schedule corrected from the posted statement",
     )  # fmt: skip
     assert body["revision_note"].startswith("fee schedule corrected")
+
+
+# ---- the approved cost model (D10, 2026-11-20) ---------------------------------------------------
+
+
+def test_the_shipped_cost_model_is_approved_and_matches_the_published_rates():
+    c = BASE.costs
+    assert c.status == "approved" and c.label == "net of approved costs"
+    r = c.rate_on("2024-02-01")  # the current schedule covers the whole history
+    assert r.commission_per_contract == 0.0  # no commission for self-directed API accounts
+    assert r.regulatory_fee_per_contract == pytest.approx(0.015 + 0.025 + 0.0003)  # ORF, OCC, CAT
+    assert r.sec_fee_rate_on_sells == pytest.approx(0.0000206)
+    assert c.rate_on("2026-11-20") == r
+
+
+def test_fees_are_charged_per_contract_each_side_and_the_sec_fee_on_the_sale_value(store):
+    a = trades_by_id(store, BASE)["A"]  # 10 contracts bought at 1.00, sold at 1.20
+    per_contract = 0.0403 * (10 + 10)  # both sides
+    sec = 0.0000206 * (1.20 * 10 * 100)  # sells only: $1,200 sold
+    assert a.fees_usd == pytest.approx(per_contract + sec)  # about $0.83
+    assert a.net_eval_usd == pytest.approx(a.eval_gross_usd - a.fees_usd)
+    harsh = a.stress_net_usd["combined_harsh"]
+    assert harsh == pytest.approx((1.17 - 1.02) * 1000 - 2 * a.fees_usd)  # fees doubled

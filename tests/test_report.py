@@ -244,3 +244,23 @@ def test_the_accounts_write_one_json_line_per_decision(tmp_path):
     (row,) = [json.loads(x) for x in acc.decisions_file.read_text().splitlines()]
     assert row["account"] == "acct:brt" and row["accepted"] is False
     assert row["reasons"] == ["STALE_QUOTE", "DELAYED_DELIVERY"] and row["contract"] is None
+
+
+def test_the_label_says_so_when_sessions_before_and_after_the_cost_model_are_mixed(tmp_path):
+    first = make_day(tmp_path, day="2026-11-19")
+    body = json.loads((first / "ledger" / "acct_brt.json").read_text())
+    body["summary"]["result_label"] = "gross of unmodeled costs"
+    (first / "ledger" / "acct_brt.json").write_text(json.dumps(body))
+    second = make_day(tmp_path, day="2026-11-23")
+    body = json.loads((second / "ledger" / "acct_brt.json").read_text())
+    body["summary"]["result_label"] = "net of approved costs"
+    (second / "ledger" / "acct_brt.json").write_text(json.dumps(body))
+    label = collect(CFG, tmp_path, NOW)["label"]
+    assert (
+        label == "net of approved costs from 2026-11-23; earlier sessions gross of unmodeled costs"
+    )
+    only_new = tmp_path / "again"
+    make_day(only_new, day="2026-11-23")
+    assert (
+        collect(CFG, only_new, NOW)["label"] == CFG.labels.results
+    )  # no label on file: the default

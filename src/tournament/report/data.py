@@ -258,6 +258,18 @@ def collect(cfg: ReportConfig, root: Path = REPO_ROOT, now: datetime | None = No
     rules = load_ledger_config().paths.exit_rules
     per_day = {d: collect_day(d, run, live_root, rules) for d, run in days.items()}
     live = live_state(cfg, now, root)
+    labels: dict[str, str] = {}
+    for d, body in per_day.items():
+        for x in body["accounts"].values():
+            lab = (x.get("summary") or {}).get("result_label")
+            if lab:
+                labels[d] = lab
+    kinds = list(dict.fromkeys(labels.values()))
+    if len(kinds) <= 1:
+        label = kinds[0] if kinds else cfg.labels.results
+    else:  # sessions before and after the cost model was approved
+        first_new = next(d for d, lab in labels.items() if lab == kinds[-1])
+        label = f"{kinds[-1]} from {first_new}; earlier sessions {kinds[0]}"
     accounts = []
     for a in cfg.accounts:
         acct = f"acct:{a.id}"
@@ -286,12 +298,12 @@ def collect(cfg: ReportConfig, root: Path = REPO_ROOT, now: datetime | None = No
         {
             "generated_at": now.isoformat(),
             "timezone": cfg.data.timezone,
-            "label": cfg.labels.results,
+            "label": label,
             "days": list(per_day),
             "engine": {k: v for k, v in live.items() if k != "accounts"},
             "accounts": accounts,
             "rule_names": {"option": option_rule_names(rules), "r": r_rule_names(rules)},
-            "rule_note": f"fills {rules.fill_delay_s:g} s after a rule fires; what-ifs only",
+            "rule_note": f"fills {rules.fill_delay_s:g} s after a rule, before fees; what-ifs",
             "limits": {
                 "trades": cfg.tables.trades_max_rows,
                 "signals": cfg.tables.signals_max_rows,

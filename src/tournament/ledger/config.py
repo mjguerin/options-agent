@@ -38,7 +38,8 @@ class Evaluation(_S):
 class CostRate(_S):
     effective_from: date
     commission_per_contract: float = Field(ge=0)
-    regulatory_fee_per_contract: float = Field(ge=0)
+    regulatory_fee_per_contract: float = Field(ge=0)  # each side: ORF, OCC and CAT together
+    sec_fee_rate_on_sells: float = Field(ge=0)  # share of the sale value, sells only
     source: str  # where the rates came from, so an auditor can check them
 
 

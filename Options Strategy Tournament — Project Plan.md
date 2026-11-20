@@ -108,7 +108,8 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 
 **Optional research track (does not block any step)**
 
-- [ ] Approve the strategy review protocol (partitions, caps, pass bars), then register hypotheses (specs/strategy_review_protocol.md, D-94)
+- [x] Approve the strategy review protocol (partitions, caps, pass bars) (approved Nov 20, 2026, D-94)
+- [ ] Register the BRT hypotheses (BRT-H1 to H3) in the access log, then run Screen (specs/strategy_review_protocol.md)
 
 ## Step 4 — Two-account validation (Phase 2)
 
@@ -132,7 +133,7 @@ Goal: all five candidates trade paper on independent accounts under one frozen m
 - [ ] Close D02: second Alpaca login, staged rollout, or an approved internal-ledger scope change
 - [ ] Create the remaining $10,000 paper accounts and bind one per strategy (FR-01)
 - [ ] Approve the evaluation and confirmation periods and the statistical decision policy before starting (D09)
-- [ ] Approve the cost model, marking rules and outage-exclusion rules (D10) (structure, marking and outage policy agreed Oct 26, 2026, D-80 and D-88; still open: verify the account's commission and the current regulatory fee rates, then set cost status to approved)
+- [x] Approve the cost model, marking rules and outage-exclusion rules (D10) (approved Nov 20, 2026, D-88: no commission, 0.0403 per contract per side plus the SEC fee on sells, from Alpaca's published schedule)
 - [ ] Freeze the manifest and tag the release; no code changes during the evaluation period
 - [ ] Confirm all five workers run within measured resource and latency budgets (AC-19)
 
