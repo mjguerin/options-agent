@@ -106,6 +106,10 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 
 **Gate:** AC-01 to AC-16 and AC-21 to AC-24 pass in shadow mode.
 
+**Optional research track (does not block any step)**
+
+- [ ] Approve the strategy review protocol (partitions, caps, pass bars), then register hypotheses (specs/strategy_review_protocol.md, D-94)
+
 ## Step 4 — Two-account validation (Phase 2)
 
 Goal: prove isolation, risk, execution and accounting on real paper fills with two accounts.
