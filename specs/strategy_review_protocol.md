@@ -33,7 +33,7 @@ contradicts the spec) is an integrity matter, handled outside this protocol.
 
 | Partition | Dates | Role | Looks allowed |
 |---|---|---|---|
-| Design | 2024-02-01 to 2024-04-30 (62 sessions) | Where hypotheses may be informed. Its behaviour has already been inspected (access log #8, #17, #18, #24, #25) | Unlimited, logged |
+| Design | 2024-02-01 to 2024-04-30 (62 sessions) | Where hypotheses are informed and values are chosen (section 3a). Its behaviour has already been inspected (access log #8, #17, #18, #24, #25) | Unlimited, logged |
 | Screen | 2024-05-01 to 2024-08-31 (about 85 sessions) | First test of a registered hypothesis | One run per registered hypothesis |
 | Validate | 2024-09-01 to 2024-12-31 (about 85 sessions) | Second, independent test of what survived Screen | One run per survivor |
 | Confirm (held out) | 2025-01-02 to 2026-10-22 (about 450 sessions) | Final test of at most two finalists | **One look per finalist, ever** |
@@ -47,14 +47,41 @@ contradicts the spec) is an integrity matter, handled outside this protocol.
 - Every run is logged in the research access log **before** it is read, in the usual form: data,
   what is looked at, what is printed, the permitted consequence.
 
+### 3a. Choosing a value from the Design partition (amended Nov 20, 2026, at the owner's request)
+
+A value is no longer a guess. It is picked by a simulation on the Design partition, under rules
+fixed in advance:
+
+- **Mechanism first.** The parameter and the *direction* of the change come from the mechanism written
+  in the registration. The data only sets the magnitude. No new rule or parameter is found by
+  searching the data.
+- **Design only** (Feb to Apr 2024). Screen, Validate, Confirm and live are not read.
+- **One parameter at a time**, the other values staying at v1's. A grid of 5 values, declared in the
+  access log before the run: v1's value and four on the mechanism's side.
+- **Printed per grid value:** positions and positions per session; mean and median R; win share; the
+  paired difference against v1 with its bootstrap bound (section 5); the difference in each of the
+  three calendar months; and the mean R of the positions the change removes, keeps and adds.
+- **Selection rule.** A grid value is *eligible* if all hold: positions per session at least 70% of
+  v1's; paired difference above zero; positive in at least 2 of the 3 months. An eligible value whose
+  neighbours on the grid are both ineligible is discarded as noise. Among the remaining eligible
+  values, **take the one closest to v1's**. If there is none, the parameter keeps v1's value and its
+  hypothesis is closed as "no support in Design".
+- **Freezing.** The chosen value, and the Design result at it as the prediction, are frozen at
+  registration. Screen and the later stages see one value per hypothesis.
+- **Limits, stated honestly.** Design holds only about 74 BRT positions, so one mean has a standard
+  error near 0.12R, larger than most differences between grid values. The rule exists to avoid
+  chasing that noise, and a chosen value should be expected to look better in Design than it will out
+  of sample. The later stages are the claim; Design is the guide.
+
 ## 4. Hypotheses: what a registration contains
 
 A hypothesis is registered, dated and frozen **before** its first Screen run. It states:
 
 1. **Strategy and mechanism**: why the change should help, in words, from how the market is
    supposed to behave, not from a pattern in last week's trades.
-2. **The change**: one rule, with its value fixed now. No sweep, no "try a few values". If more
-   than one value is genuinely to be compared, each is a separate registered hypothesis.
+2. **The change**: one rule, with its value fixed at registration, chosen by the Design procedure
+   in section 3a (not by a sweep on any other partition). If more than one value is genuinely to be
+   compared outside Design, each is a separate registered hypothesis.
 3. **The prediction**: the direction and a rough size, and which other quantities should *not*
    move (for example "trade frequency stays within 30% of v1").
 4. **The test and the bar it must clear** (section 5).
@@ -64,15 +91,11 @@ every extra test raises the chance that one passes by luck. Hypotheses are writt
 reference to Screen, Validate, Confirm or live outcomes. The material they may draw on is the
 Design partition, the specs, and the structure of the strategies.
 
-**Round 1 starting list (BRT only).** These come from the strategy spec text alone, not from any
-outcome, and are drafts for the owner to keep, rewrite or discard. Each is one change with its
-value fixed by reasoning. They use 3 of the 6 hypotheses a round allows.
-
-| ID | Change | Mechanism | Prediction |
-|---|---|---|---|
-| BRT-H1 | `brk_min` 0.25 A to 0.5 A | A break that clears the level by only a quarter of a typical bar is more likely noise. Half an A is the same size as the retest depth the spec already tolerates, so the break must be at least as decisive as the retest may be deep | Fewer setups, a higher share that follow through; trades per session fall but stay within 30% of v1 |
-| BRT-H2 | `retest_wick_max` 1.0 A to 0.5 A | The spec calls 1.0 A "an initial design choice, not validated". A wick a full A below the level means the level failed intrabar even if the bar closes back above; closes and wicks should use one tolerance (`retest_depth` = 0.5 A) | Removes the deepest retests; a modest rise in mean R per position, a small fall in frequency |
-| BRT-H3 | `rr_min` 1.2 to 1.5 | A setup whose target is close to its entry offers little reward for its risk and loses to costs and noise first | Fewer, better setups; frequency falls, the payoff ratio rises |
+**Round 1 (BRT only).** The registered hypotheses, with their values chosen on the Design partition
+under section 3a, are in `strategy_review_registry.md`: BRT-H1 (`brk_min` to 0.75), BRT-H2
+(`retest_wick_max` to 0.7, the section 3a choice), BRT-H3 (`rr_min` to 1.35) and BRT-H4
+(`retest_wick_max` to 0.5, the same mechanism at the value that makes wick and close tolerance equal).
+That is 4 of the 6 hypotheses a round allows. The mechanisms came from the strategy spec text alone.
 
 Questions for the other strategies (FBR's and ORB's tails, an entry confirmation that removes weak
 signals) are deferred until BRT's round has ended.
@@ -95,7 +118,7 @@ decision measure: locking small gains raises it without changing the money.
 
 | Stage | Pass if all hold |
 |---|---|
-| Screen | Paired difference at least +0.10R; its one-sided 80% bound above zero; trades per session within 30% of v1 |
+| Screen | Paired difference at least **+0.05R** (lowered from +0.10R on 2026-11-20 by the owner, before any Screen run: the predicted effects are mostly smaller than +0.10R); its one-sided 80% bound above zero; trades per session within 30% of v1 |
 | Validate | One-sided 95% bound above zero in R after Holm adjustment across **all** registered hypotheses of the round; trades per session within 30% of v1; no calendar month worse than −0.30R against v1; **and** the option-level paired difference in dollars per position has a positive point estimate (the same sign as the R result) |
 | Confirm | Point estimate positive and its one-sided 90% bound above zero in R; the option-level paired difference positive in sign; same frequency band; the Validate result not reversed in sign |
 
@@ -138,8 +161,9 @@ Settled on Nov 20 by the owner:
 2. The caps: 6 hypotheses a round, 2 rounds, 2 finalists.
 3. The pass bars, including the option-level check at Validate.
 4. The "no new indicators and no parameter optimization" posture is lifted for the three BRT
-   parameters named in section 4 only.
-5. BRT-H1 to H3 are kept as the starting list.
+   parameters registered in the registry only (`brk_min`, `retest_wick_max`, `rr_min`).
+5. The BRT ideas (break clearance, wick tolerance, room to target) are kept; their values are chosen
+   on Design under section 3a and registered as BRT-H1 to H4.
 6. **D10, the cost model, is approved** (D-88): no commission; 0.0403 dollars per contract on each
    side (ORF, OCC and CAT) plus the SEC fee on the sale value; the current schedule applied to the
    whole history. Results from Nov 20 are labelled "net of approved costs", so every bar in section 5
