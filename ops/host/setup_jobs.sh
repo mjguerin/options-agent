@@ -44,7 +44,7 @@ sudo -u "$OWNER" mkdir -p "$REPO/data/run" "$OWNER_HOME/Library/Logs/options-tou
 sudo -u "$OWNER" cp "$STAGE/supervisord.conf" "$REPO/data/run/supervisord.conf"
 
 step "Install the LaunchDaemons (root-owned, 644)"
-for job in supervisor engine-start nightly; do
+for job in supervisor engine-start nightly housekeeping; do
     label="com.options-tournament.$job"
     plutil -lint "$STAGE/$job.plist" >/dev/null
     install -o root -g wheel -m 644 "$STAGE/$job.plist" "/Library/LaunchDaemons/$label.plist"

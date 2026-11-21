@@ -67,6 +67,13 @@ nightly:                             # after-close job: history download and che
     min_option_contracts: 1
     min_option_bars: 1000
 
+housekeeping:                         # disk: the daily raw-frame recordings (stream.jsonl) are about
+                                      # 0.25 GB a session and compress about tenfold
+  compress_stream:
+    day_of_month: 1                  # the job runs on this day of every month
+    start_time: "06:00"              # exchange local time; no session is running at that hour
+    keep_sessions_months: 0          # 0 = every session before the current month is compressed
+
 performance:
   classify_cache_size: 4096          # distinct sale-condition combinations cached
   rvol_history_depth_factor: 4       # past sessions kept per reference session, for gaps

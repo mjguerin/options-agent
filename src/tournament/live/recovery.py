@@ -14,6 +14,7 @@ outage: a crash is a gap in the feed, and never silently a quiet market.
 
 from __future__ import annotations
 
+import gzip
 import json
 import logging
 from pathlib import Path
@@ -38,7 +39,9 @@ def previous_runs(day_dir: Path, mode: str) -> list[Path]:
 
 def read_journal(path: Path):
     """(received_at, kind, payload) for each line; a torn last line is skipped, not fatal."""
-    with path.open() as f:
+    gz = path.with_name(path.name + ".gz")  # a month-old recording is compressed (ops compress)
+    opener = (lambda: gzip.open(gz, "rt")) if not path.exists() and gz.exists() else path.open
+    with opener() as f:
         for line in f:
             try:
                 row = json.loads(line)

@@ -171,6 +171,7 @@ def test_every_job_file_renders_without_placeholders(rendered):
         "supervisor.plist",
         "engine-start.plist",
         "nightly.plist",
+        "housekeeping.plist",
     }
     for f in rendered.values():
         assert "__" not in f.read_text().replace("__main__", "")
@@ -255,3 +256,11 @@ def test_tctl_refuses_an_unknown_command_and_never_includes_the_engine_in_all():
     assert (
         "SERVICES=(alerts api dashboard report)" in text
     )  # "all" is these three, never the engine
+
+
+def test_the_housekeeping_job_runs_on_the_configured_day_of_the_month(rendered):
+    plist = plistlib.loads(rendered["housekeeping.plist"].read_bytes())
+    assert plist["ProgramArguments"][-3:] == ["tournament", "ops", "compress"]
+    h = CFG.housekeeping.compress_stream
+    hh, mm = (int(x) for x in h.start_time.split(":"))
+    assert plist["StartCalendarInterval"] == [{"Day": h.day_of_month, "Hour": hh, "Minute": mm}]

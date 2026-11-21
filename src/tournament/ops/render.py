@@ -14,6 +14,17 @@ TEMPLATES = Path(__file__).resolve().parents[3] / "ops" / "templates"
 WEEKDAYS = (1, 2, 3, 4, 5)  # launchd: Monday = 1 ... Friday = 5
 
 
+def monthly_xml(hhmm: str, day: int) -> str:
+    h, m = (int(x) for x in hhmm.split(":"))
+    return (
+        "\t\t<dict>\n"
+        f"\t\t\t<key>Day</key><integer>{day}</integer>\n"
+        f"\t\t\t<key>Hour</key><integer>{h}</integer>\n"
+        f"\t\t\t<key>Minute</key><integer>{m}</integer>\n"
+        "\t\t</dict>"
+    )
+
+
 def calendar_xml(hhmm: str, weekdays_only: bool) -> str:
     h, m = (int(x) for x in hhmm.split(":"))
     days = WEEKDAYS if weekdays_only else (None,)
@@ -42,6 +53,10 @@ def values(cfg: AppConfig, owner: str, home: Path, repo: Path, uv: str) -> dict[
         "__STOPWAIT__": str(cfg.engine.stop_wait_s),
         "__ENGINE_CALENDAR__": calendar_xml(cfg.engine.launch_time, True),
         "__NIGHTLY_CALENDAR__": calendar_xml(cfg.nightly.start_time, cfg.nightly.weekdays_only),
+        "__HOUSEKEEPING_CALENDAR__": monthly_xml(
+            cfg.housekeeping.compress_stream.start_time,
+            cfg.housekeeping.compress_stream.day_of_month,
+        ),
     }
 
 

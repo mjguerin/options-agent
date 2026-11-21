@@ -238,6 +238,20 @@ def _engine_daily(args: argparse.Namespace) -> int:
         return 3
 
 
+def _ops_compress(args: argparse.Namespace) -> int:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from tournament.appconfig import app_config
+    from tournament.ops.compress import run_compress
+
+    cfg = app_config()
+    today = datetime.now(ZoneInfo(cfg.exchange.timezone)).date()
+    return run_compress(
+        today, _data_root() / "live", cfg.housekeeping.compress_stream.keep_sessions_months
+    )
+
+
 def _ops_nightly(args: argparse.Namespace) -> int:
     import logging
 
@@ -581,6 +595,10 @@ def build_parser() -> argparse.ArgumentParser:
     ops_sub = ops.add_subparsers(dest="ops_command", required=True)
     nightly = ops_sub.add_parser("nightly", help="download missing history, check coverage")
     nightly.set_defaults(func=_ops_nightly)
+    compress = ops_sub.add_parser(
+        "compress", help="gzip the raw-frame recordings of sessions before this month"
+    )
+    compress.set_defaults(func=_ops_compress)
     render = ops_sub.add_parser("render", help="render the Supervisor and launchd files")
     render.add_argument("--owner", required=True)
     render.add_argument("--home", required=True)

@@ -156,6 +156,22 @@ class Nightly(_Section):
         return v
 
 
+class CompressStream(_Section):
+    day_of_month: int = Field(ge=1, le=28)  # launchd runs the job on this day of every month
+    start_time: str  # exchange-local clock time, on that day
+    keep_sessions_months: int = Field(ge=0)  # sessions this many whole months back stay plain
+
+    @field_validator("start_time")
+    @classmethod
+    def _hhmm(cls, v: str) -> str:
+        _clock(v)
+        return v
+
+
+class Housekeeping(_Section):
+    compress_stream: CompressStream
+
+
 class Performance(_Section):
     classify_cache_size: int = Field(gt=0)
     rvol_history_depth_factor: int = Field(ge=1)
@@ -171,6 +187,7 @@ class AppConfig(_Section):
     history: History
     engine: Engine
     nightly: Nightly
+    housekeeping: Housekeeping
     performance: Performance
 
     @property

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Monthly job: compress old raw-frame recordings (config/app housekeeping.compress_stream). -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.options-tournament.housekeeping</string>
+	<key>UserName</key>
+	<string>__USER__</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__UV__</string>
+		<string>run</string>
+		<string>--project</string>
+		<string>__REPO__</string>
+		<string>tournament</string>
+		<string>ops</string>
+		<string>compress</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>__REPO__</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>__HOME__</string>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/bin:/bin</string>
+	</dict>
+	<key>StartCalendarInterval</key>
+	<array>
+__HOUSEKEEPING_CALENDAR__
+	</array>
+	<key>StandardOutPath</key>
+	<string>__LOGS__/housekeeping.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOGS__/housekeeping.log</string>
+</dict>
+</plist>
