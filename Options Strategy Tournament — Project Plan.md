@@ -110,6 +110,7 @@ Goal: everything between a candidate and a reconciled fill works in shadow mode 
 
 - [x] Approve the strategy review protocol (partitions, caps, pass bars) (approved Nov 20, 2026, D-94)
 - [x] Register the BRT hypotheses and run Screen (frozen Nov 20, 2026; all four failed Screen and are closed; v1 unchanged; specs/strategy_review_registry.md)
+- [ ] Strategy review paused (owner, Nov 20, 2026, D-96): revisit at 100 closed forward positions each for BRT and FBR, at D09, or on request
 
 ## Step 4 — Two-account validation (Phase 2)
 

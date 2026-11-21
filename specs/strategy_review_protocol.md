@@ -1,4 +1,4 @@
-# Strategy review protocol (APPROVED by the owner, 2026-11-20)
+# Strategy review protocol (APPROVED by the owner, 2026-11-20; review PAUSED after Round 1, D-96)
 
 Drafted Nov 3, 2026; approved by the owner on Nov 20, 2026 with the scope decision below. Its purpose
 is to settle **in advance, before any outcome is looked at**, when and how the five strategies may
