@@ -141,3 +141,80 @@ What the run showed:
 ## Errata
 
 None.
+
+# Round 2: ORB (registered 2026-11-21)
+
+Requested by the owner after a trade-by-trade review of ORB on Design (access log #28). The review is
+exploratory: it printed 21 Design positions and 35 one-at-a-time sweep variants, and the values below
+came from that, so Design cannot count as evidence for them. Only Screen and Validate can. The
+owner asked for this run outside the full change protocol; the Screen bars below are the protocol's.
+
+## ORB-H1: let winners run (one combined hypothesis, three values together)
+
+- **Mechanism.** ORB's profit comes from a few large winners, and v1's exits close them early: after
+  a target exit price ran about +10R further, and after follow-through and trail exits about +5 to +6R.
+  Stopped-out trades mostly were right to stop (they ended the day about -3.7R).
+- **Change (`config/strategies/orb-v2a.yaml`).** `ft_bars` 10 to off (no follow-through exit);
+  `tgt_mult` 1.0 to 2.0; `inv_frac` 0.25 to 0.40. Nothing else.
+- **Why together and why these values.** On Design, each alone beat v1 (+0.33R, +0.15R, +0.07R on 21
+  positions, which is within noise), the grids moved in one direction, and the three act on the same
+  mechanism. Values are the ones tried on Design; no others were run and none will be adjusted.
+- **Measure.** Mean R per position, **in v1's risk unit** (the points result divided by the distance
+  from entry to v1's invalidation level), so a wider stop does not shrink every R by construction. The
+  variant's own-unit R is reported beside it.
+- **Test.** Screen (2024-05-01 to 2024-08-31), paired against v1 by session bootstrap (10,000 resamples,
+  seed 20261120). **Pass:** difference at least +0.05R, 80% lower bound above zero, positions per
+  session 70% to 130% of v1. A copy of v1's values must first reproduce v1 exactly.
+- **Consequence.** Pass: advances to Validate (protocol bars). Fail: closed; no value or bar changes
+  and the hypothesis is not re-run with other values.
+- **Power note.** About 25 to 30 ORB positions are expected on Screen. A real effect of 0.2R would
+  rarely clear these bars. A fail is therefore weak evidence against the idea, and a pass is weak
+  evidence for it; either way live ORB results will decide.
+- **Freeze.** SHA-256 `d78779847f777b30e906b2ed554f871d81938af574febed4f980880c01f24503` for `config/strategies/orb-v2a.yaml` and `21d7f6abb81c6faa834e74ae24d5b1e8d6fd3c7909f8047a3a3cdc5af05df618` for
+  `research/review/orb_screen.py` (orb-v1.yaml is unchanged: `cf71bce181af2f0f9bada0e569c363159b2b4ba84e47a706ae6f65b22a100493`).
+  These were recorded before the run and not committed, at the owner's rule of committing only on request.
+
+## ORB-H1 Screen outcome (run 2026-11-21, access log #29)
+
+Run exactly as registered; the sanity check passed. 85 sessions, 2024-05-01 to 2024-08-31, dataset
+`history:38cd89e20a737330`. v1 on Screen: 42 positions, mean -0.036R, median -0.453R, 36% wins.
+
+| ID | Positions | Mean R (v1 unit) | Difference vs v1 | 80% lower bound | Share of v1's frequency | Verdict |
+|---|---|---|---|---|---|---|
+| ORB-H1 let winners run | 42 | +0.305 (own unit +0.195) | **+0.340R** | +0.144 | 100% | **Passed** all three bars |
+
+- Same 42 entries as v1 (nothing removed or added); only the exits and the stop changed. Win share
+  36% to 45%, median R -0.645, payoff 1.64.
+- By month the difference was -0.08R (May), +0.79R (June), -0.15R (July), +1.18R (August): **two months
+  carry the result and two are slightly negative.** With 42 positions, a few large winners drive it.
+- It advances to Validate. The protocol's Validate bars still apply and are stricter: a 95% bound after
+  Holm, worst month no worse than -0.30R, and a positive option-level paired difference (the option-level
+  method must be registered in a dated note before that run).
+
+## ORB-H1 Validate plan (frozen 2026-11-21, before the run; access log #31)
+
+One run on 2024-09-01 to 2024-12-31 with the protocol's Validate bars and the option-level method in `specs/option_level_replay_method.md` (debugged on Design only, #30: 90% coverage, R and dollar signs agree). SHA-256 at the time of the run:
+
+- `specs/option_level_replay_method.md`: `8f3e37ddcebf57eed787b6e3a46dc8ab75177a777bb50fd1435638bb4fa2f320`
+- `research/review/option_replay.py`: `ca2b88eecaa123993723464892083e4bf9996f40da04c0d4f53247b30bd9171a`
+- `research/review/orb_validate.py`: `d1d47f2ac2347b7eab4f8e4b82ea75a96a5b7f3b6d3871e6b01df81474684744`
+- `config/strategies/orb-v2a.yaml`: `d78779847f777b30e906b2ed554f871d81938af574febed4f980880c01f24503`
+
+
+## ORB-H1 Validate outcome (run 2026-11-21, access log #31): FAILED, closed
+
+84 sessions, 2024-09-01 to 2024-12-31. v1: 27 positions, mean +0.365R, 48% wins. orb-v2a: 28 positions,
+mean +0.626R, 43% wins, median -0.313R.
+
+| Bar | Result | Met |
+|---|---|---|
+| One-sided 95% bound above zero (Holm over 1 test) | difference **+0.260R**, bound **-0.285** | **No** |
+| Frequency within 30% | 1.04 | Yes |
+| No month worse than -0.30R | Sep +0.56, Oct +0.76, Nov +0.56, **Dec -0.68** | **No** |
+| Option-level difference positive, same sign as R, at least 80% evaluable | **+$319 per position** ($417 against $98); 100% of positions priced | Yes |
+
+By the protocol the hypothesis is **closed**: it is not re-run with other values, and no bar or method
+changes because of the result. What the two runs show together, for the record and not as a reason to
+reopen it: the point estimate was positive on Screen (+0.34R) and on Validate (+0.26R, +$319 per position
+at the option level), with 42 and 27 positions. The sample is too small to separate that from chance (the
+95% bound is below zero), and one month (December) went the other way. Confirm was not read.

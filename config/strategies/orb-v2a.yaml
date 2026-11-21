@@ -1,0 +1,20 @@
+# ORB variant for hypothesis ORB-H1 (specs/strategy_review_registry.md): orb-v1 with THREE values changed
+# together, as one "let winners run" hypothesis: follow-through exit off, target 2.0 x W, invalidation
+# 0.40 x W. Registered and frozen on 2026-11-21 before any Screen run. Do not edit after registration.
+strategy_id: orb
+version: orb-v2a
+required_features: [atr_current, rvol]
+params:
+  w_min: 3.0            # A_OR
+  w_max: 10.0
+  last_entry_slot: 120
+  brk_buffer: 0.10      # A_OR
+  rvol_min: 1.5
+  inv_frac: 0.40        # x W   (v1: 0.25)
+  tgt_mult: 2.0         # x W   (v1: 1.0)
+  rr_min: 1.0           # x r_u
+  trail_activate_r: 1.0
+  stop_buffer: 0.25     # A_setup (A_cur at the trigger)
+  ft_r: 0.5
+  ft_bars: null         # follow-through exit off (v1: 10)
+  max_hold: 60
