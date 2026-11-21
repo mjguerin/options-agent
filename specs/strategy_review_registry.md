@@ -109,6 +109,35 @@ Frozen file fingerprints (SHA-256 of the file bytes):
 - **Multiple testing.** Screen uses the loose bound above (a gate, not a claim). Claims rest on
   Validate and Confirm only.
 
+## Round 1 outcome: Screen run, 2026-11-20 (access log #27)
+
+Run exactly as registered (commit `a992b65`); the sanity check passed. 85 sessions, 2024-05-01 to
+2024-08-31, dataset `history:38cd89e20a737330`. v1 on Screen: 137 positions, mean +0.077R, median
+-0.413R, 39% wins, payoff 1.7.
+
+| ID | Positions | Mean R | Difference vs v1 | 80% lower bound | Share of v1's frequency | Verdict |
+|---|---|---|---|---|---|---|
+| BRT-H1 `brk_min` 0.75 | 116 | -0.197 | **-0.274R** | -0.434 | 85% | **Failed** (difference, bound) |
+| BRT-H2 `retest_wick_max` 0.7 | 134 | +0.119 | +0.042R | -0.016 | 98% | **Failed** (difference, bound) |
+| BRT-H3 `rr_min` 1.35 | 134 | +0.095 | +0.019R | about 0 | 98% | **Failed** (difference) |
+| BRT-H4 `retest_wick_max` 0.5 | 120 | +0.051 | -0.025R | -0.115 | 88% | **Failed** (difference, bound) |
+
+All four are closed. By the protocol a closed hypothesis is not re-run with another value, and a
+second round is allowed only for hypotheses registered before these results were read; none were, so
+the BRT review ends with v1 unchanged.
+
+What the run showed:
+
+- **H1 reversed.** Design said +0.236R; Screen said -0.274R, and every month was negative. The
+  positions it removed averaged +0.27R, so it removed winners.
+- **H4 also removed winners** (25 positions averaging +0.28R); on Design the positions it removed had
+  averaged -0.52R.
+- **H2 and H3 landed inside or near their predicted ranges** (+0.01 to +0.04R and +0.03 to +0.09R)
+  but below the +0.05R bar: small, plausible effects that Screen could not tell from zero.
+- **The v1 baseline itself moved.** BRT's mean R was -0.273 on Design and +0.077 on Screen, a swing of
+  +0.35R with no change to the strategy. That is the size of the noise a partition of this size has,
+  and it is larger than every effect these hypotheses predicted.
+
 ## Errata
 
 None.
