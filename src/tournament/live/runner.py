@@ -32,6 +32,7 @@ from tournament.live.engine import ShadowEngine
 from tournament.live.ledger_writer import write_session_ledgers
 from tournament.live.load import LoopProbe, write_load
 from tournament.live.options_runner import OptionsCollector
+from tournament.live.paper_accounts import paper_db_path, start_paper_accounts
 from tournament.live.recovery import mark_outage_from, previous_runs, replay_journals
 from tournament.live.session import LiveSession
 from tournament.live.shadow_accounts import ShadowAccounts, has_exposure, shadow_db_path
@@ -180,7 +181,9 @@ def run_session(
             if incidents is not None:
                 incidents.open(now, "PREFLIGHT_FAILED", names)
             # a failed preflight blocks new entries; it never abandons positions already held
-            if not has_exposure(shadow_db_path(day_dir, fresh)):
+            if not has_exposure(shadow_db_path(day_dir, fresh)) and not has_exposure(
+                paper_db_path(day_dir)
+            ):
                 raise PreflightFailed(preflight_report)
             manage_only = True
             log.error("preflight failed but exposure exists: managing it, no new entries")
@@ -243,6 +246,20 @@ def run_session(
         except Exception as exc:  # noqa: BLE001 - recording must go on without the accounts
             log.exception("shadow accounts not started: %s", exc)
             accounts = None
+    paper = None
+    if engine is not None and collector is not None and mode == "shadow":
+        paper = start_paper_accounts(
+            fc["paper_accounts"],
+            day,
+            collector,
+            engine,
+            yaml.safe_load(COMMON.read_text())["session"]["cutoff_min_before_close"],
+            paper_db_path(day_dir),
+            fc["shadow_accounts"]["starting_balance_usd"],
+            recovered,
+            manage_only,
+            incidents,
+        )
     monitor = None
     if incidents is not None:
         monitor = SessionMonitor(
@@ -254,6 +271,7 @@ def run_session(
             collector,
             engine,
             accounts,
+            paper,
         )
 
     control = None
@@ -286,6 +304,8 @@ def run_session(
             control.tick(now)  # commands first: an operator pause beats a new entry
         if accounts is not None:
             accounts.tick(now)
+        if paper is not None:
+            paper.tick(now)
         if monitor is not None:
             monitor.tick(now)
 
@@ -367,6 +387,14 @@ def run_session(
                             incidents.open(
                                 now_end, "RECONCILIATION_FAILED", str(bad)[:200], binding
                             )
+            if paper is not None and now_end >= pd.Timestamp(day.close_utc):
+                for binding, r in paper.post_close(now_end).items():
+                    bad = (
+                        r.get("error") or r.get("position_mismatches") or r.get("unresolved_orders")
+                    )
+                    if bad and incidents is not None:
+                        incidents.open(now_end, "RECONCILIATION_FAILED", str(bad)[:200], binding)
+                    reconciliation = {**(reconciliation or {}), binding: r}
             load = None
             try:
                 meters = [stream.meter] + ([collector.stream.meter] if collector else [])
@@ -393,6 +421,7 @@ def run_session(
                     "fresh": fresh,
                     "ledgers": ledgers,
                     "load": load,
+                    "paper": None if paper is None else paper.summary(),
                 },
             )
             if ledgers is not None and "error" not in ledgers:

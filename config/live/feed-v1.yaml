@@ -28,9 +28,23 @@ alerts:
 
 shadow_accounts:                    # modeled paper accounts in shadow mode (orders/sim.py)
   enabled: true
-  starting_balance_usd: 10000       # equal for every strategy (FR-06, FR-13)
+  starting_balance_usd: 10000       # equal for every strategy and for the paper accounts (FR-06, FR-13)
   tick_every_s: 1.0                 # how often the position loop runs
   reconcile_every_s: 300            # compare our books with the broker's this often (OM-05)
+
+# Real Alpaca paper accounts, one per strategy, run beside the modeled ones (Step 4). Each needs
+# its own Alpaca paper account and an alias in .env (ALPACA_<ALIAS>_KEY_ID / _SECRET_KEY). An
+# account that fails its checks is left out and reported; it never trades. Turned on 2026-11-21.
+paper_accounts:
+  enabled: true
+  strategies: [orb, brt, fbr]
+  aliases: {orb: orb, brt: brt, fbr: fbr}   # credential alias per strategy
+  tick_every_s: 1.0                 # position loop: polls the broker for fills and manages exits
+  reconcile_every_s: 300
+  cash_cache_s: 2.0                 # how long an account's cash reading is reused when sizing
+  min_options_level: 1              # the account must be approved for options at this level
+  expected_equity_usd: 10000        # equal starting balance (FR-06); a gap is a warning
+  equity_tolerance_usd: 500
 
 # Option quotes (OPRA). D-52 to D-54, DRAFT.
 options:

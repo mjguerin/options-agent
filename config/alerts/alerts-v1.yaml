@@ -124,6 +124,10 @@ kinds:
     severity: critical
     open: "{account} did not reconcile after the close: {detail}"
     resolved: "{account} reconciled."
+  PAPER_ACCOUNT_REFUSED:
+    severity: critical
+    open: "{account} paper account will not trade today: {detail}"
+    resolved: "{account} paper account passed its checks."
   EXIT_BLIND:
     severity: critical
     open: "{account} cannot exit {detail}: no usable bid. Forced exits go to market; others wait."

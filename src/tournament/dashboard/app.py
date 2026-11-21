@@ -85,8 +85,11 @@ def page_overview(b, status: dict) -> None:
             "Realized plus open profit and loss per account. "
             "The no-trade reference is the zero line."
         )
-        st.line_chart(data.drawdown(hist, 10_000.0), height=160)
-        st.caption("Drop from each account's peak, in dollars (from a $10,000 start).")
+        from tournament.live.runner import load_feed_config
+
+        start = float(load_feed_config()["shadow_accounts"]["starting_balance_usd"])
+        st.line_chart(data.drawdown(hist, start), height=160)
+        st.caption(f"Drop from each account's peak, in dollars (from a ${start:,.0f} start).")
     del sessions
     inc = status.get("open_incidents", [])
     if inc:

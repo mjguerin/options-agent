@@ -31,6 +31,30 @@ def _keys_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def _paper_check(args: argparse.Namespace) -> int:
+    """Read-only: log in to each strategy's paper account and say whether it may trade."""
+    from tournament.live.paper_accounts import connect_accounts
+    from tournament.live.runner import load_feed_config
+
+    pc = load_feed_config()["paper_accounts"]
+    brokers, report = connect_accounts(pc, list(pc["strategies"]))
+    for sid, r in report.items():
+        mark = "ok  " if r["ok"] else "FAIL"
+        facts = (
+            f"{r['account']} equity {r['equity_usd']:,.2f} cash {r['cash_usd']:,.2f} "
+            f"options level {r['options_level']}"
+            if "account" in r
+            else f"alias {r.get('alias', sid)!r}"
+        )
+        print(f"{mark} {sid}: {facts}")
+        for note in r.get("problems", []) + r.get("warnings", []):
+            print(f"       - {note}")
+    print(
+        f"paper_accounts.enabled is {pc['enabled']}; {len(brokers)} of {len(report)} would trade."
+    )
+    return 0 if len(brokers) == len(report) else 1
+
+
 def _hello(args: argparse.Namespace) -> int:
     from tournament.adapters.alpaca import get_account_summary, paper_trading_client
 
@@ -443,6 +467,11 @@ def build_parser() -> argparse.ArgumentParser:
     hello = sub.add_parser("hello", help="read the paper account through the Alpaca API")
     hello.add_argument("--account", default=dev, help=f"account alias (default: {dev})")
     hello.set_defaults(func=_hello)
+
+    paper_check = sub.add_parser(
+        "paper-check", help="check every strategy's Alpaca paper account (read-only)"
+    )
+    paper_check.set_defaults(func=_paper_check)
 
     data = sub.add_parser("data-check", help="confirm real-time SIP and OPRA market data access")
     data_alias = app_config().accounts.data_alias

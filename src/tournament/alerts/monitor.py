@@ -32,9 +32,11 @@ class SessionMonitor:
         collector=None,
         engine=None,
         accounts=None,
+        paper=None,
     ) -> None:
         self.inc, self.cfg, self.session, self.mode = incidents, cfg, session, mode
         self.collector, self.engine, self.accounts = collector, engine, accounts
+        self.paper, self._seen_paper_errors = paper, 0
         self.heartbeat_file = heartbeat_file
         self._last: pd.Timestamp | None = None
         self._last_beat: pd.Timestamp | None = None
@@ -107,14 +109,17 @@ class SessionMonitor:
             self.inc.open(now, "ENGINE_ERROR", self.engine.error)
 
     def _accounts(self, now) -> None:
-        a = self.accounts
-        if a is None:
-            return
-        for err in a.errors[self._seen_errors :]:
+        if self.accounts is not None:
+            self._seen_errors = self._check_accounts(now, self.accounts, self._seen_errors)
+        if self.paper is not None:
+            self._seen_paper_errors = self._check_accounts(now, self.paper, self._seen_paper_errors)
+
+    def _check_accounts(self, now, a, seen: int) -> int:
+        for err in a.errors[seen:]:
             self.inc.open(
                 now, "ACCOUNT_ERROR", err, key=f"ACCOUNT_ERROR:{len(a.errors)}:{err[:40]}"
             )
-        self._seen_errors = len(a.errors)
+        seen = len(a.errors)
         for binding, rt in a.router.runtimes.items():
             if rt.halted == "DAILY_LIMIT":
                 loss = rt.guard.breach_loss
@@ -159,6 +164,7 @@ class SessionMonitor:
                 )
             elif not held:
                 self.inc.resolve(now, "RESIDUAL_EXPOSURE", binding)
+        return seen
 
     def _conditions(self, now) -> None:
         """D-36: unknown condition codes are monitored and alerted, however rare."""
@@ -180,11 +186,12 @@ class SessionMonitor:
             return
         self._ready_sent = True
         n = len(self.accounts.router.runtimes) if self.accounts is not None else 0
+        paper = f", {len(self.paper.router.runtimes)} paper" if self.paper is not None else ""
         at = now.tz_convert(app_config().exchange.tz).strftime("%H:%M")
         self.inc.notify(
             now,
             "ENGINE_READY",
-            f"{self.session.day.session_date} {self.mode}: {n} accounts, stock and option "
+            f"{self.session.day.session_date} {self.mode}: {n} accounts{paper}, stock and option "
             f"feeds connected at {at} ET",
         )
 

@@ -32,6 +32,13 @@ log = logging.getLogger(__name__)
 
 
 class ShadowAccounts:
+    PREFIX = "acct"  # account bindings are f"{PREFIX}:{strategy}"
+    DECISIONS = "decisions.jsonl"
+
+    def _make_broker(self, sid: str, collector, starting_balance: float, mult: int):
+        """The broker for one account: the modeled one here, a real paper broker in a subclass."""
+        return SimBroker(collector.feed, self.orders_cfg.simulation, starting_balance, mult)
+
     def __init__(
         self,
         day: SessionDay,
@@ -47,18 +54,18 @@ class ShadowAccounts:
         self.collector, self.tick_every = collector, pd.Timedelta(seconds=tick_every_s)
         self.reconcile_every = pd.Timedelta(seconds=reconcile_every_s)
         self._last_reconcile: pd.Timestamp | None = None
-        self.decisions_file = db_path.parent / "decisions.jsonl"  # one line per entry decision
+        self.decisions_file = db_path.parent / self.DECISIONS  # one line per entry decision
         self.engine = create_engine(f"sqlite:///{db_path}")
         metadata.create_all(self.engine)
         self.store = IntentStore(self.engine)
         cutoff = pd.Timestamp(day.close_utc) - pd.Timedelta(minutes=cutoff_min_before_close)
         mult = self.risk.sizing.contract_multiplier
         self.errors: list[str] = []
-        self.brokers: dict[str, SimBroker] = {}
+        self.brokers: dict = {}
         runtimes = {}
         for sid in strategies:
-            binding = f"acct:{sid}"
-            sim = SimBroker(collector.feed, self.orders_cfg.simulation, starting_balance, mult)
+            binding = f"{self.PREFIX}:{sid}"
+            sim = self._make_broker(sid, collector, starting_balance, mult)
             self.brokers[binding] = sim
             runtimes[binding] = AccountRuntime(
                 binding,
@@ -139,7 +146,9 @@ class ShadowAccounts:
 
     def _reference_exit(self, strategy_id: str, candidate_id: str, reason: str, when) -> None:
         try:
-            self.router.on_reference_exit(when, f"acct:{strategy_id}", candidate_id, reason)
+            self.router.on_reference_exit(
+                when, f"{self.PREFIX}:{strategy_id}", candidate_id, reason
+            )
         except Exception as exc:  # noqa: BLE001
             self.errors.append(f"exit {candidate_id}: {type(exc).__name__}: {exc}")
             log.exception("shadow account failed on a reference exit")
@@ -156,7 +165,7 @@ class ShadowAccounts:
                 rt.orders.reconcile_positions(now)
                 rt.ledger.refresh(now, binding, self.store)
                 for sid, cid, reason in closed_references:
-                    if f"acct:{sid}" == binding:
+                    if f"{self.PREFIX}:{sid}" == binding:
                         rt.on_reference_exit(now, cid, reason)
             except Exception as exc:  # noqa: BLE001
                 rt.operator_halt = "RECOVERY_FAILED"
