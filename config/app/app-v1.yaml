@@ -18,7 +18,7 @@ exchange:
   after_hours_hours: 4               # extended session ends this many hours after the close
 
 accounts:
-  data_alias: data                   # .env alias holding the SIP + OPRA entitlement (login 2)
+  data_alias: orb                    # .env alias holding the SIP + OPRA entitlement (login 2)
   dev_alias: dev                     # development paper account
 
 endpoints:
