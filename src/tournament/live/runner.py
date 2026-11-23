@@ -288,7 +288,12 @@ def run_session(
             control = ControlPlane(
                 queue,
                 api_cfg,
-                accounts.router.runtimes,
+                # the modeled and the real paper accounts, told apart by binding (acct:*, paper:*),
+                # so state, curves and operator controls cover both
+                {
+                    **accounts.router.runtimes,
+                    **({} if paper is None else paper.router.runtimes),
+                },
                 heartbeat_path(REPO_ROOT, api_cfg.state.file),
                 session,
                 mode,

@@ -89,11 +89,17 @@ def engine_light(status: dict) -> tuple[str, str]:
 
 def accounts_table(state: dict | None) -> pd.DataFrame:
     rows = []
-    for binding, a in sorted(((state or {}).get("accounts") or {}).items()):
+    # real Alpaca paper accounts are the source of truth: they come first, modeled ones after
+    items = sorted(
+        ((state or {}).get("accounts") or {}).items(),
+        key=lambda kv: (not kv[0].startswith("paper:"), kv[0]),
+    )
+    for binding, a in items:
         unreal = sum((p.get("unrealized_usd") or 0.0) for p in a.get("positions_detail", []))
         rows.append(
             {
                 "account": binding,
+                "source": "Alpaca paper (actual)" if binding.startswith("paper:") else "modeled",
                 "status": account_status(a),
                 "positions": sum(a.get("positions", {}).values()),
                 "exposure $": a.get("exposure_usd", 0.0),

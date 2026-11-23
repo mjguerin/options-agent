@@ -260,10 +260,9 @@ def test_an_unreachable_api_is_an_error_the_page_can_show():
 
 @pytest.fixture()
 def app(world, monkeypatch):
-    make_orders_db(
-        (world.root / "data" / "live" / "2026-10-26" / "shadow").mkdir(parents=True)
-        or (world.root / "data" / "live" / "2026-10-26" / "shadow" / "accounts.sqlite")
-    )
+    day = world.root / "data" / "live" / "2026-10-26"
+    (day / "shadow").mkdir(parents=True)
+    make_orders_db(day / "accounts.sqlite")  # the engine keeps the databases in the day folder
     monkeypatch.setattr(
         backend_module, "override", Backend(CFG, world.client, None, root=world.root)
     )

@@ -71,7 +71,7 @@ def page_overview(b, status: dict) -> None:
             "ready by about 03:45."
         )
     else:
-        table.insert(1, "", table["status"].map(STATUS_ICON))
+        table.insert(2, "", table["status"].map(STATUS_ICON))
         st.dataframe(table, hide_index=True, use_container_width=True)
     st.subheader("Profit and loss through the session")
     sessions = data.session_dirs(b.live_root, state.get("session"))
@@ -112,7 +112,9 @@ def page_strategies(b, status: dict) -> None:
     c[3].metric("Version", f"{s['version']} / {s['config_hash']}")
     if s["blocks"] or s["reasons"]:
         st.write("**Why it can't act now:**", ", ".join(s["blocks"] + s["reasons"]))
-    acct = (state.get("accounts") or {}).get(f"acct:{sid}", {})
+    accounts = state.get("accounts") or {}
+    # the real paper account is the source of truth; the modeled one is the benchmark
+    acct = accounts.get(f"paper:{sid}") or accounts.get(f"acct:{sid}", {})
     st.subheader("Positions")
     pos = acct.get("positions_detail", [])
     if pos:
@@ -143,7 +145,15 @@ def page_execution(b, status: dict) -> None:
         return
     run = st.selectbox("Run", [d.name for d in dirs])
     folder = next(d for d in dirs if d.name == run)
-    orders, events = data.read_orders(folder / "accounts.sqlite")
+    # the modeled accounts and the real Alpaca paper accounts, told apart by account_binding
+    parts = [
+        data.read_orders(folder.parent / n) for n in ("accounts.sqlite", "paper-accounts.sqlite")
+    ]
+    parts = [p for p in parts if not p[0].empty]
+    orders = pd.concat([p[0] for p in parts], ignore_index=True) if parts else pd.DataFrame()
+    events = pd.concat([p[1] for p in parts], ignore_index=True) if parts else pd.DataFrame()
+    if not orders.empty:
+        orders = orders.sort_values("created_at", kind="stable", ignore_index=True)
     if orders.empty:
         st.caption("No orders in this run.")
         return

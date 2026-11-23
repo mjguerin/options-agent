@@ -103,6 +103,64 @@ def _funnel(transitions: pd.DataFrame, candidates: pd.DataFrame) -> dict[str, di
     return out
 
 
+def _paper_orders(db: Path) -> dict[str, dict]:
+    """Per candidate, what the real Alpaca paper account bought and sold (filled quantity and
+    average fill price), from the paper order database. Empty when there is no paper account."""
+    import sqlite3
+
+    if not db.exists():
+        return {}
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        rows = con.execute(
+            "select candidate_id, purpose, qty_filled, avg_fill_price from orders "
+            "where qty_filled > 0 and avg_fill_price is not null"
+        ).fetchall()
+    except sqlite3.Error:
+        return {}
+    finally:
+        con.close()
+    out: dict[str, dict] = {}
+    for cid, purpose, qty, price in rows:
+        b = out.setdefault(cid, {"in": [0, 0.0], "out": [0, 0.0]})[
+            "in" if purpose == "entry" else "out"
+        ]
+        b[0] += qty
+        b[1] += qty * price
+    return out
+
+
+def _overlay_paper(day: str, live_root: Path, accounts: dict[str, dict]) -> None:
+    """Real executions are the source of truth: where the paper account traded a candidate, its
+    fills and result replace the modeled ones. The modeled figures stay beside them."""
+    paper = _paper_orders(live_root / day / "paper-accounts.sqlite")
+    if not paper:
+        return
+    rate = load_ledger_config().costs.rate_on(day)
+    per_contract = rate.commission_per_contract + rate.regulatory_fee_per_contract
+    for x in accounts.values():
+        touched = False
+        for t in x["trades"]:
+            p = paper.get(t["candidate_id"])
+            if not p or not p["in"][0]:
+                continue
+            q_in, p_in = p["in"][0], p["in"][1] / p["in"][0]
+            q_out = p["out"][0]
+            p_out = p["out"][1] / q_out if q_out else None
+            closed = min(q_in, q_out)
+            gross = (p_out - p_in) * closed * 100 if closed else 0.0
+            sold = (p_out or 0.0) * q_out * 100
+            fees = per_contract * (q_in + q_out) + rate.sec_fee_rate_on_sells * sold
+            t["modeled"] = {k: t.get(k) for k in ("entry", "exit", "qty", "net_usd")}
+            t.update(entry=p_in, exit=p_out, qty=q_in, open_qty=q_in - closed, net_usd=gross - fees)
+            t["source"] = "paper"
+            touched = True
+        if touched:
+            x["modeled_day_net_usd"] = x["day_net_usd"]
+            x["day_net_usd"] = sum(t["net_usd"] or 0.0 for t in x["trades"])
+            x["source"] = "paper"
+
+
 def collect_day(day: str, run: Path, live_root: Path, rules: ExitRules) -> dict:
     ledgers = {}
     for f in sorted((run / "ledger").glob("acct_*.json")):
@@ -160,6 +218,8 @@ def collect_day(day: str, run: Path, live_root: Path, rules: ExitRules) -> dict:
             )
         accounts[acct] = {"trades": trades, "summary": body["summary"], "signals": []}
         accounts[acct]["day_net_usd"] = body["summary"]["net_pnl_est_usd"]
+
+    _overlay_paper(day, live_root, accounts)
 
     # every candidate the strategies emitted, and what became of it
     if not cands.empty:
@@ -270,6 +330,16 @@ def collect(cfg: ReportConfig, root: Path = REPO_ROOT, now: datetime | None = No
     else:  # sessions before and after the cost model was approved
         first_new = next(d for d, lab in labels.items() if lab == kinds[-1])
         label = f"{kinds[-1]} from {first_new}; earlier sessions {kinds[0]}"
+    paper_from = next(
+        (
+            d
+            for d, b in per_day.items()
+            if any(x.get("source") == "paper" for x in b["accounts"].values())
+        ),
+        None,
+    )
+    if paper_from:
+        label = f"actual Alpaca paper fills from {paper_from}; earlier sessions modeled"
     accounts = []
     for a in cfg.accounts:
         acct = f"acct:{a.id}"

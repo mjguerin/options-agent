@@ -304,7 +304,7 @@ function render() {
   ].map(([l, v, s]) => `<div class="stat"><div class="stat-label">${l}</div><div class="stat-value">${v}</div><div class="stat-sub">${s}</div></div>`).join('');
   $('grid').className = state.view === 'all' ? '' : 'one';
   $('grid').innerHTML = state.view === 'all' ? summaryTable(set) : card(inScope[0], set);
-  $('foot').textContent = `All times ${tz()}. P&L is the evaluation ledger plus open positions at a fresh bid, ${DATA.label}. "Strategy outcome" is what the strategy's own position did on SPY, whether or not we traded it, in units of its own risk (R). Shadow results are modeled fills and are development data.`;
+  $('foot').textContent = `All times ${tz()}. P&L is the evaluation ledger plus open positions at a fresh bid, ${DATA.label}. "Strategy outcome" is what the strategy's own position did on SPY, whether or not we traded it, in units of its own risk (R). Where a strategy has an Alpaca paper account its real fills are the result; earlier days and the other strategies are modeled fills and development data.`;
 }
 function setRange(r) { state.range = r; render(); }
 function setView(v) { state.view = v; history.replaceState(null, '', v === 'all' ? location.pathname : '#' + v); render(); window.scrollTo(0, 0); }
